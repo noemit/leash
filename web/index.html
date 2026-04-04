@@ -278,9 +278,7 @@
             <div class="model-info" id="model-info"></div>
         </div>
 
-        <div id="message-list" class="message-list">
-            <div class="message system">Same origin as this page — works behind ngrok or Cloudflare Tunnel.</div>
-        </div>
+        <div id="message-list" class="message-list"></div>
 
         <div class="composer">
             <div class="input-area">
@@ -312,9 +310,8 @@
         let serverBackend = 'ollama';
         let availableModels = [];
         let selectedModel = '';
-        let conversationHistory = [
-            { role: 'system', content: 'You are a helpful assistant. Answer clearly and concisely.' }
-        ];
+        /** Mirror of server session (full list including system); refreshed via /api/session and each /api/chat. */
+        let conversationHistory = [];
 
         function escapeHtml(s) {
             const d = document.createElement('div');
@@ -339,6 +336,39 @@
             messageList.appendChild(div);
             messageList.scrollTop = messageList.scrollHeight;
             return div;
+        }
+
+        function renderFromServer(messages) {
+            messageList.innerHTML = '';
+            let shown = false;
+            for (const m of messages) {
+                if (!m || typeof m !== 'object') continue;
+                if (m.role === 'system') continue;
+                const c = m.content;
+                if (typeof c !== 'string') continue;
+                if (m.role === 'user') {
+                    addMessage('user', c, false);
+                    shown = true;
+                } else if (m.role === 'assistant') {
+                    addMessage('ai', c, false);
+                    shown = true;
+                }
+            }
+            if (!shown) {
+                addMessage('system', 'Same origin as this page — works behind ngrok or Cloudflare Tunnel.', false);
+            }
+        }
+
+        async function loadSession() {
+            try {
+                const r = await fetch(API_BASE + '/api/session', { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                conversationHistory = Array.isArray(data.messages) ? data.messages : [];
+                renderFromServer(conversationHistory);
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         function setConnected(ok, msg) {
@@ -436,16 +466,15 @@
             input.disabled = true;
             setConnected(true, 'Thinking…');
 
-            conversationHistory.push({ role: 'user', content: text });
             addMessage('user', text, false);
-
             const aiEl = addMessage('ai', '…', false);
             try {
                 const response = await fetch(API_BASE + '/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
                     body: JSON.stringify({
-                        messages: conversationHistory,
+                        content: text,
                         model: selectedModel
                     })
                 });
@@ -456,8 +485,10 @@
                 } catch (_) {}
 
                 if (!response.ok) {
-                    conversationHistory.pop();
                     aiEl.remove();
+                    const userMsgs = messageList.querySelectorAll('.message.user');
+                    if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
+                    await loadSession();
                     const detail = data.detail != null
                         ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))
                         : raw || ('HTTP ' + response.status);
@@ -465,13 +496,15 @@
                     return;
                 }
 
-                const reply = data.response || '';
-                conversationHistory.push({ role: 'assistant', content: reply });
-                aiEl.textContent = reply;
+                conversationHistory = Array.isArray(data.messages) ? data.messages : conversationHistory;
+                aiEl.remove();
+                renderFromServer(conversationHistory);
             } catch (err) {
                 console.error(err);
-                conversationHistory.pop();
                 aiEl.remove();
+                const userMsgs = messageList.querySelectorAll('.message.user');
+                if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
+                await loadSession();
                 addMessage('system', err.message || 'Request failed', false);
             } finally {
                 busy = false;
@@ -489,6 +522,7 @@
                 const response = await fetch(API_BASE + '/api/pi/cwd', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
                     body: JSON.stringify({ subpath: sub }),
                 });
                 const raw = await response.text();
@@ -518,7 +552,10 @@
             }
         });
 
-        populateModels();
+        (async function init() {
+            await populateModels();
+            await loadSession();
+        })();
     </script>
 </body>
 </html>

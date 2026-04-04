@@ -1,17 +1,19 @@
+import copy
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
-from pi_bridge import PiBridge, last_user_text
+from pi_bridge import PiBridge
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:latest"))
@@ -22,6 +24,12 @@ BACKEND = os.getenv("LEASH_BACKEND", "ollama").strip().lower()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
+
+SESSION_COOKIE = "leash_session"
+SESSION_MAX_AGE = int(os.getenv("LEASH_SESSION_MAX_AGE_SEC", str(7 * 24 * 3600)))
+SYSTEM_PROMPT = "You are a helpful assistant. Answer clearly and concisely."
+# In-memory chat per browser session (cleared on server restart).
+SESSION_MESSAGES: Dict[str, List[Dict[str, Any]]] = {}
 
 pi_bridge: Optional[PiBridge] = None
 if BACKEND == "pi":
@@ -72,8 +80,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Leash", version="1.2", lifespan=lifespan)
 
 
-class ChatBody(BaseModel):
-    messages: List[Dict[str, Any]] = Field(..., min_length=1)
+def _set_session_cookie(resp: JSONResponse, sid: str) -> None:
+    resp.set_cookie(
+        SESSION_COOKIE,
+        sid,
+        httponly=True,
+        samesite="lax",
+        max_age=SESSION_MAX_AGE,
+        path="/",
+    )
+
+
+def _ensure_session(sid: Optional[str]) -> str:
+    if not sid:
+        sid = uuid.uuid4().hex
+    if sid not in SESSION_MESSAGES:
+        SESSION_MESSAGES[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    return sid
+
+
+class ChatTurnBody(BaseModel):
+    """Single user turn; full history stays on the server (in-memory)."""
+
+    content: str = Field(..., min_length=1)
     model: Optional[str] = None
 
 
@@ -234,35 +263,71 @@ async def pi_new_session():
     return {"ok": True}
 
 
-@app.post("/api/chat")
-async def chat(body: ChatBody):
-    if BACKEND == "pi":
-        if not pi_bridge:
-            raise HTTPException(status_code=500, detail="Pi bridge not initialized")
-        user_txt = last_user_text(body.messages)
-        if not user_txt:
-            raise HTTPException(status_code=400, detail="No user message to send to Pi")
-        try:
-            text = await pi_bridge.prompt(user_txt, float(CHAT_TIMEOUT))
-        except TimeoutError:
-            raise HTTPException(status_code=504, detail="Pi timed out before finishing the turn")
-        except RuntimeError as e:
-            raise HTTPException(status_code=503, detail=str(e))
-        return {
-            "response": text,
-            "model": _pi_model_label(),
-            "timestamp": datetime.now().isoformat(),
-        }
+@app.get("/api/session")
+async def get_session(request: Request):
+    """Return chat messages for this browser session (sets session cookie)."""
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    resp = JSONResponse({"messages": copy.deepcopy(SESSION_MESSAGES[sid])})
+    _set_session_cookie(resp, sid)
+    return resp
 
-    model_name = resolve_model(body.model)
-    models = await get_available_models()
-    if models and model_name not in models:
-        available = ", ".join(models) if models else "none"
+
+@app.post("/api/chat")
+async def chat(request: Request, body: ChatTurnBody):
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    msgs = SESSION_MESSAGES[sid]
+    user_txt = str(body.content).strip()
+    if not user_txt:
+        raise HTTPException(status_code=400, detail="Empty message")
+
+    msgs.append({"role": "user", "content": user_txt})
+
+    try:
+        if BACKEND == "pi":
+            if not pi_bridge:
+                raise HTTPException(status_code=500, detail="Pi bridge not initialized")
+            text = await pi_bridge.prompt(user_txt, float(CHAT_TIMEOUT))
+            resp_body: Dict[str, Any] = {
+                "response": text,
+                "model": _pi_model_label(),
+                "timestamp": datetime.now().isoformat(),
+            }
+        else:
+            model_name = resolve_model(body.model)
+            models = await get_available_models()
+            if models and model_name not in models:
+                available = ", ".join(models) if models else "none"
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Model '{model_name}' not found. Available: {available}",
+                )
+            out = await process_message_ollama(model_name, msgs)
+            text = out["response"]
+            resp_body = {
+                "response": text,
+                "model": out.get("model", model_name),
+                "timestamp": out.get("timestamp", datetime.now().isoformat()),
+            }
+    except HTTPException:
+        msgs.pop()
+        raise
+    except TimeoutError:
+        msgs.pop()
         raise HTTPException(
-            status_code=404,
-            detail=f"Model '{model_name}' not found. Available: {available}",
+            status_code=504, detail="Pi timed out before finishing the turn"
         )
-    return await process_message_ollama(model_name, body.messages)
+    except RuntimeError as e:
+        msgs.pop()
+        raise HTTPException(status_code=503, detail=str(e))
+
+    msgs.append({"role": "assistant", "content": text})
+    resp_body["messages"] = copy.deepcopy(msgs)
+
+    resp = JSONResponse(resp_body)
+    _set_session_cookie(resp, sid)
+    return resp
 
 
 @app.get("/")

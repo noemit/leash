@@ -63,6 +63,7 @@ Use a **venv** so `pip` can upgrade uvicorn/FastAPI cleanly (avoids “externall
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8080` | Listen port |
 | `CHAT_TIMEOUT_SEC` | `300` | Upstream request timeout |
+| `LEASH_SESSION_MAX_AGE_SEC` | `604800` (7d) | Browser **`leash_session`** cookie lifetime |
 | `LEASH_BACKEND` | `ollama` | Set to `pi` to drive Pi instead of raw Ollama |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | How to start Pi (must include `--mode rpc`) |
 | `LEASH_PI_CWD` | **`$HOME`** (your user folder) | **Root sandbox** for Pi’s tools / files. Unset = home, not the `server/` cwd. |
@@ -70,6 +71,8 @@ Use a **venv** so `pip` can upgrade uvicorn/FastAPI cleanly (avoids “externall
 Model is **only** whatever you pass to Pi on the command line (`--model …` in `LEASH_PI_COMMAND`); the UI does not call Pi `set_model`.
 
 **Pi subfolder in the UI:** With **`LEASH_BACKEND=pi`**, the page shows **Pi folder** — a path **relative to `LEASH_PI_CWD`** (no `..`, must already exist). Changing it **restarts** the Pi process with that `cwd`. You can also use **`GET/POST /api/pi/cwd`** (`subpath` in JSON).
+
+**Chat session:** The web UI uses **`GET /api/session`** and a **`leash_session`** cookie. Each **`POST /api/chat`** sends only **`{ "content": "…", "model": "…" }`**; the server keeps the full transcript **in memory** (lost on Leash restart) and sends the complete history to Ollama over localhost. That keeps tunnel requests small.
 
 ### Pi mode example
 
