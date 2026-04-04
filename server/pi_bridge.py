@@ -74,6 +74,27 @@ def resolve_pi_argv(argv: List[str]) -> List[str]:
     return [found] + rest
 
 
+def safe_pi_subdir(root: Path, subpath: Optional[str]) -> Path:
+    """Resolve a path under root only. Empty subpath → root. Rejects absolute paths and '..'."""
+    root = root.resolve()
+    if subpath is None or not str(subpath).strip():
+        return root
+    raw = str(subpath).strip().replace("\\", "/").lstrip("/")
+    if not raw or raw == ".":
+        return root
+    for part in Path(raw).parts:
+        if part == "..":
+            raise ValueError("subpath must not contain '..'")
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise ValueError("subpath must stay under LEASH_PI_CWD")
+    if not candidate.is_dir():
+        raise ValueError(f"not a directory: {candidate}")
+    return candidate
+
+
 def normalize_pi_cwd(raw: Optional[str]) -> str:
     """Pi's subprocess cwd must exist. Expand ~ and resolve.
 
@@ -137,7 +158,8 @@ class PiBridge:
     def __init__(self) -> None:
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._lock = asyncio.Lock()
-        self._cwd = normalize_pi_cwd(os.getenv("LEASH_PI_CWD"))
+        self._root_dir = normalize_pi_cwd(os.getenv("LEASH_PI_CWD"))
+        self._cwd = self._root_dir
         raw = os.getenv(
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
@@ -161,8 +183,51 @@ class PiBridge:
     def cwd(self) -> str:
         return self._cwd
 
+    @property
+    def root_dir(self) -> str:
+        return self._root_dir
+
+    @property
+    def subpath_relative(self) -> str:
+        root = Path(self._root_dir).resolve()
+        cwd = Path(self._cwd).resolve()
+        try:
+            rel = cwd.relative_to(root)
+            if rel == Path("."):
+                return ""
+            return str(rel).replace("\\", "/")
+        except ValueError:
+            return ""
+
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.returncode is None
+
+    async def _stop_proc(self) -> None:
+        t = self._stderr_task
+        self._stderr_task = None
+        if t and not t.done():
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        proc = self._proc
+        self._proc = None
+        if proc and proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()
+
+    async def set_effective_cwd(self, subpath: Optional[str]) -> str:
+        """Move Pi's cwd to a subdirectory of LEASH_PI_CWD; restarts the Pi process."""
+        new_path = safe_pi_subdir(Path(self._root_dir), subpath)
+        new_s = str(new_path)
+        async with self._lock:
+            await self._stop_proc()
+            self._cwd = new_s
+        return new_s
 
     async def ensure_running(self) -> None:
         if self.is_running():
@@ -299,14 +364,8 @@ class PiBridge:
                     raise RuntimeError(f"Pi extension error: {err}")
 
     async def shutdown(self) -> None:
-        proc = self._proc
-        self._proc = None
-        if proc and proc.returncode is None:
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                proc.kill()
+        # Do not take _lock: a long prompt would block app shutdown forever.
+        await self._stop_proc()
 
 
 def last_user_text(messages: List[Dict[str, Any]]) -> Optional[str]:

@@ -133,6 +133,51 @@
         .text-muted { color: var(--text-muted); }
         .text-error { color: var(--offline); }
         .model-info strong { color: var(--text); font-weight: 700; }
+        .pi-workspace {
+            display: none;
+            width: 100%;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            background: var(--bg);
+            border: var(--line);
+        }
+        .pi-workspace.visible { display: flex; }
+        .pi-workspace label { color: var(--text-muted); flex: 0 0 100%; }
+        @media (min-width: 520px) {
+            .pi-workspace label { flex: 0 0 auto; }
+        }
+        .pi-workspace input {
+            flex: 1;
+            min-width: 140px;
+            padding: 8px 10px;
+            border: var(--line);
+            background: var(--surface);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.85rem;
+        }
+        .pi-workspace button {
+            padding: 8px 14px;
+            border: var(--line);
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .pi-workspace button:hover { background: var(--accent-hover); }
+        .pi-workspace button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pi-workspace .pi-ws-hint {
+            flex: 0 0 100%;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -149,6 +194,13 @@
                 <span id="status-text">Connecting…</span>
             </div>
             <div class="model-info" id="model-info"></div>
+        </div>
+
+        <div id="pi-workspace-row" class="pi-workspace" aria-label="Pi working folder">
+            <label for="pi-subpath-input">Pi folder (relative to <code>LEASH_PI_CWD</code>)</label>
+            <input type="text" id="pi-subpath-input" placeholder="e.g. projects/my-repo" autocomplete="off" />
+            <button type="button" id="pi-subpath-btn">Set folder</button>
+            <span class="pi-ws-hint" id="pi-workspace-hint"></span>
         </div>
 
         <div id="message-list" class="message-list">
@@ -175,6 +227,10 @@
         const messageList = document.getElementById('message-list');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
+        const piWorkspaceRow = document.getElementById('pi-workspace-row');
+        const piSubpathInput = document.getElementById('pi-subpath-input');
+        const piSubpathBtn = document.getElementById('pi-subpath-btn');
+        const piWorkspaceHint = document.getElementById('pi-workspace-hint');
 
         let busy = false;
         let serverBackend = 'ollama';
@@ -219,14 +275,24 @@
                 if (!response.ok || !Array.isArray(data.models)) {
                     setConnected(false, 'API error');
                     modelInfo.innerHTML = '<span class="text-error">Could not list models</span>';
+                    piWorkspaceRow.classList.remove('visible');
                     return;
                 }
                 serverBackend = data.backend || 'ollama';
                 const sub = document.getElementById('page-subtitle');
                 if (sub) {
                     sub.textContent = serverBackend === 'pi'
-                        ? 'Pi coding agent (RPC) — same folder as LEASH_PI_CWD on the server'
+                        ? 'Pi coding agent (RPC) — folder = LEASH_PI_CWD plus optional subfolder below'
                         : 'Local Ollama (e.g. Qwen 3.5) — open this page from your tunnel URL';
+                }
+                if (serverBackend === 'pi' && data.pi_workspace) {
+                    piWorkspaceRow.classList.add('visible');
+                    piSubpathInput.value = data.pi_workspace.subpath || '';
+                    const r = data.pi_workspace.root || '';
+                    const eff = data.pi_workspace.effective || '';
+                    piWorkspaceHint.textContent = r ? ('Root: ' + r + (eff && eff !== r ? ' · Now: ' + eff : '')) : '';
+                } else {
+                    piWorkspaceRow.classList.remove('visible');
                 }
                 availableModels = data.models.slice();
                 const def = data.current_default || '';
@@ -265,6 +331,7 @@
                 console.error(err);
                 setConnected(false, 'Offline');
                 modelInfo.innerHTML = '<span class="text-error">' + escapeHtml(err.message) + '</span>';
+                piWorkspaceRow.classList.remove('visible');
             }
         }
 
@@ -322,6 +389,35 @@
                 void populateModels();
             }
         }
+
+        piSubpathBtn.addEventListener('click', async () => {
+            if (serverBackend !== 'pi' || busy) return;
+            const sub = piSubpathInput.value.trim();
+            piSubpathBtn.disabled = true;
+            try {
+                const response = await fetch(API_BASE + '/api/pi/cwd', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subpath: sub }),
+                });
+                const raw = await response.text();
+                let data = {};
+                try {
+                    data = raw ? JSON.parse(raw) : {};
+                } catch (_) {}
+                if (!response.ok) {
+                    const detail = typeof data.detail === 'string' ? data.detail : (raw || ('HTTP ' + response.status));
+                    addMessage('system', detail, false);
+                    return;
+                }
+                addMessage('system', 'Pi restarted in: ' + (data.effective || sub), false);
+                void populateModels();
+            } catch (err) {
+                addMessage('system', err.message || 'Request failed', false);
+            } finally {
+                piSubpathBtn.disabled = false;
+            }
+        });
 
         sendBtn.addEventListener('click', sendMessage);
         input.addEventListener('keydown', (e) => {

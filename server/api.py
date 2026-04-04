@@ -28,6 +28,16 @@ if BACKEND == "pi":
     pi_bridge = PiBridge()
 
 
+def _pi_workspace_dict() -> Dict[str, str]:
+    if not pi_bridge:
+        return {}
+    return {
+        "root": pi_bridge.root_dir,
+        "effective": pi_bridge.cwd,
+        "subpath": pi_bridge.subpath_relative,
+    }
+
+
 def _pi_model_label() -> str:
     """Label for JSON/UI: prefer `--model` from LEASH_PI_COMMAND, else OLLAMA_MODEL."""
     if not pi_bridge:
@@ -42,7 +52,9 @@ def _pi_model_label() -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if BACKEND == "pi" and pi_bridge:
-        print(f"[API] Backend: Pi (RPC)  cwd={pi_bridge.cwd}")
+        print(
+            f"[API] Backend: Pi (RPC)  root={pi_bridge.root_dir}  cwd={pi_bridge.cwd}"
+        )
         print(f"[API] Pi command: {' '.join(pi_bridge.argv)}")
         print(f"[API] Pi model (from --model / OLLAMA_MODEL): {_pi_model_label()}")
     else:
@@ -63,6 +75,12 @@ app = FastAPI(title="Leash", version="1.2", lifespan=lifespan)
 class ChatBody(BaseModel):
     messages: List[Dict[str, Any]] = Field(..., min_length=1)
     model: Optional[str] = None
+
+
+class PiCwdBody(BaseModel):
+    """Relative path under LEASH_PI_CWD (empty string = use root)."""
+
+    subpath: str = ""
 
 
 async def get_available_models() -> List[str]:
@@ -140,8 +158,11 @@ async def health_check():
             "pi": {
                 "running": pi_bridge.is_running(),
                 "cwd": pi_bridge.cwd,
+                "root": pi_bridge.root_dir,
+                "subpath": pi_bridge.subpath_relative,
                 "command": pi_bridge.argv,
             },
+            "pi_workspace": _pi_workspace_dict(),
         }
     models = await get_available_models()
     return {
@@ -164,6 +185,7 @@ async def list_models():
             "current_default": label,
             "backend": BACKEND,
             "ollama_reachable": ollama_ok,
+            "pi_workspace": _pi_workspace_dict(),
         }
     models = await get_available_models()
     return {
@@ -172,6 +194,30 @@ async def list_models():
         "backend": BACKEND,
         "ollama_reachable": ollama_ok,
     }
+
+
+@app.get("/api/pi/cwd")
+async def pi_get_cwd():
+    if BACKEND != "pi" or not pi_bridge:
+        raise HTTPException(
+            status_code=400,
+            detail="Pi backend not enabled (set LEASH_BACKEND=pi).",
+        )
+    return _pi_workspace_dict()
+
+
+@app.post("/api/pi/cwd")
+async def pi_set_cwd(body: PiCwdBody):
+    if BACKEND != "pi" or not pi_bridge:
+        raise HTTPException(
+            status_code=400,
+            detail="Pi backend not enabled (set LEASH_BACKEND=pi).",
+        )
+    try:
+        await pi_bridge.set_effective_cwd(body.subpath)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, **_pi_workspace_dict()}
 
 
 @app.post("/api/pi/new-session")

@@ -13,28 +13,41 @@ Licensed under the [MIT License](LICENSE).
 
 ## Quick start
 
+Work from a **clone of this repo** (repository root = folder that contains `server/`, `web/`, and `requirements.txt`).
+
 ### Prerequisites
 
-- [Ollama](https://ollama.ai) installed and running
-- Python **3.10–3.12** (you’re in a good place on **3.12**). Install from this repo’s `requirements.txt` in a venv. (**Python 3.14** users need **`uvicorn>=0.38`**, which that file already pins.)
-- A model pulled, e.g. `ollama pull qwen3.5:latest`
+1. [Ollama](https://ollama.ai) installed — **start it** (menu bar app on Mac, or `ollama serve`). Confirm: `ollama list` works in a terminal.
+2. Python **3.10–3.12** recommended (3.12 is a good default). Use a **venv** and this repo’s `requirements.txt`. (**Python 3.14:** `requirements.txt` already pins **`uvicorn>=0.38`**.)
+3. At least one model pulled, e.g. `ollama pull qwen3.5:latest` (name must **exactly** match `OLLAMA_MODEL` / what you pick in the UI).
 
-### Run the harness
+### Run the harness (pick one)
+
+**A — Docker** (compose includes an Ollama service; needs [Docker](https://docs.docker.com/get-docker/) installed):
 
 ```bash
-# Option A: Docker (includes an Ollama service in compose)
 docker compose up -d
-
-# Option B: Python (uses Ollama on the host)
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-python3 -m pip install -r requirements.txt
-cd server && python3 api.py
 ```
+
+**B — Python** (Leash uses Ollama already running on the host):
+
+1. `cd` to the **repository root**.
+2. Create and activate a venv, install deps:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate          # Windows cmd: .venv\Scripts\activate.bat
+                                      # Windows PowerShell: .venv\Scripts\Activate.ps1
+   python3 -m pip install -r requirements.txt
+   ```
+3. Start the API from **`server/`**:
+   ```bash
+   cd server && python3 api.py
+   ```
+   On Windows, if `python3` is missing, use `python api.py` after `cd server`.
 
 Use a **venv** so `pip` can upgrade uvicorn/FastAPI cleanly (avoids “externally managed” errors on macOS/Homebrew Python). On many Macs the command is `python3`, not `python`. If you want `python` to work: `brew install python` then ensure your PATH includes Homebrew’s prefix, or add `alias python=python3` to `~/.zshrc`.
 
-Open **http://localhost:8080** (or your tunnel URL on a phone).
+4. Open **http://localhost:8080** in a browser (or your tunnel URL on a phone).
 
 ### Tunnel from a phone
 
@@ -52,9 +65,11 @@ Open **http://localhost:8080** (or your tunnel URL on a phone).
 | `CHAT_TIMEOUT_SEC` | `300` | Upstream request timeout |
 | `LEASH_BACKEND` | `ollama` | Set to `pi` to drive Pi instead of raw Ollama |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | How to start Pi (must include `--mode rpc`) |
-| `LEASH_PI_CWD` | **`$HOME`** (your user folder) | Directory Pi uses for tools / files. Unset = home, not the `server/` cwd. |
+| `LEASH_PI_CWD` | **`$HOME`** (your user folder) | **Root sandbox** for Pi’s tools / files. Unset = home, not the `server/` cwd. |
 
 Model is **only** whatever you pass to Pi on the command line (`--model …` in `LEASH_PI_COMMAND`); the UI does not call Pi `set_model`.
+
+**Pi subfolder in the UI:** With **`LEASH_BACKEND=pi`**, the page shows **Pi folder** — a path **relative to `LEASH_PI_CWD`** (no `..`, must already exist). Changing it **restarts** the Pi process with that `cwd`. You can also use **`GET/POST /api/pi/cwd`** (`subpath` in JSON).
 
 ### Pi mode example
 
@@ -68,7 +83,17 @@ export LEASH_PI_COMMAND="pi --mode rpc --provider ollama --model qwen3.5:latest"
 cd server && python3 api.py
 ```
 
-**Windows (PowerShell)** — set the project folder Pi should use (must exist):
+**Windows (cmd.exe)** — use `set`, not PowerShell’s `$env:`:
+
+```bat
+set LEASH_BACKEND=pi
+set LEASH_PI_CWD=C:\Users\You\your-repo
+set LEASH_PI_COMMAND=pi --mode rpc --provider ollama --model qwen3.5:latest
+cd C:\path\to\leash\server
+python api.py
+```
+
+**Windows (PowerShell)** — same idea:
 
 ```powershell
 $env:LEASH_BACKEND = "pi"
@@ -107,7 +132,9 @@ uvicorn api:app --reload --host 0.0.0.0 --port 8080
 
 ## Troubleshooting
 
-**Model not found** — `ollama pull <name>` and pick that exact tag in the UI.
+**Model not found** — Run `ollama pull <name>` and use the **exact** tag everywhere (e.g. `qwen3.5:latest`, not `qwen3.:latest`). In Pi mode, the name in **`LEASH_PI_COMMAND`** (`--model …`) must match `ollama list`.
+
+**Pi on Windows: `FileNotFoundError` / “cannot find the file”** — Python often does not see `pi` on PATH. Install `npm install -g @mariozechner/pi-coding-agent`, ensure `%AppData%\npm` is on PATH, or set **`LEASH_PI_COMMAND`** to the full path to **`pi.cmd`**, e.g. `C:\Users\You\AppData\Roaming\npm\pi.cmd --mode rpc --provider ollama --model qwen3.5:latest`. (Recent `pi_bridge.py` also probes `%AppData%\npm` automatically.)
 
 **Port in use** — set `PORT=8081` (or free the port).
 
