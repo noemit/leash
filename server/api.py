@@ -79,6 +79,19 @@ async def get_available_models() -> List[str]:
         return []
 
 
+async def ollama_tags_reachable() -> bool:
+    """True if Ollama answers GET /api/tags (daemon up)."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{OLLAMA_HOST}/api/tags",
+                timeout=aiohttp.ClientTimeout(total=3),
+            ) as resp:
+                return resp.status == 200
+    except Exception:
+        return False
+
+
 def resolve_model(requested: Optional[str]) -> str:
     return requested if requested else MODEL_NAME
 
@@ -114,21 +127,22 @@ async def process_message_ollama(model_name: str, messages: List[Dict[str, Any]]
 
 @app.get("/health")
 async def health_check():
+    ollama_ok = await ollama_tags_reachable()
     if BACKEND == "pi" and pi_bridge:
         label = _pi_model_label()
-        out: Dict[str, Any] = {
+        return {
             "status": "online",
             "backend": BACKEND,
             "models": [label],
             "current_default": label,
             "timestamp": datetime.now().isoformat(),
+            "ollama_reachable": ollama_ok,
             "pi": {
                 "running": pi_bridge.is_running(),
                 "cwd": pi_bridge.cwd,
                 "command": pi_bridge.argv,
             },
         }
-        return out
     models = await get_available_models()
     return {
         "status": "online",
@@ -136,16 +150,28 @@ async def health_check():
         "models": models,
         "current_default": MODEL_NAME,
         "timestamp": datetime.now().isoformat(),
+        "ollama_reachable": ollama_ok,
     }
 
 
 @app.get("/models")
 async def list_models():
+    ollama_ok = await ollama_tags_reachable()
     if BACKEND == "pi" and pi_bridge:
         label = _pi_model_label()
-        return {"models": [label], "current_default": label, "backend": BACKEND}
+        return {
+            "models": [label],
+            "current_default": label,
+            "backend": BACKEND,
+            "ollama_reachable": ollama_ok,
+        }
     models = await get_available_models()
-    return {"models": models, "current_default": MODEL_NAME, "backend": BACKEND}
+    return {
+        "models": models,
+        "current_default": MODEL_NAME,
+        "backend": BACKEND,
+        "ollama_reachable": ollama_ok,
+    }
 
 
 @app.post("/api/pi/new-session")

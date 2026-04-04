@@ -230,6 +230,7 @@
                 }
                 availableModels = data.models.slice();
                 const def = data.current_default || '';
+                const ollamaDown = data.ollama_reachable === false;
                 if (serverBackend === 'pi' && availableModels.length === 0 && def) {
                     availableModels = [def];
                 }
@@ -243,13 +244,23 @@
                 } else {
                     modelBadge.textContent = 'Model: (none)';
                     modelNameEl.textContent = serverBackend === 'pi' ? 'Set LEASH_PI_COMMAND' : 'Run ollama pull …';
-                    setConnected(true, 'API up — no models');
-                    modelInfo.innerHTML = '<span class="text-muted">' + (serverBackend === 'pi' ? 'Pi: ensure ollama provider / model in env' : 'Pull a model in Ollama') + '</span>';
+                    if (ollamaDown) {
+                        setConnected(false, 'Ollama not running');
+                        modelInfo.innerHTML = '<span class="text-error">Ollama is not running or not reachable from the server (check OLLAMA_HOST).</span>';
+                    } else {
+                        setConnected(true, 'API up — no models');
+                        modelInfo.innerHTML = '<span class="text-muted">' + (serverBackend === 'pi' ? 'Pi: ensure ollama provider / model in env' : 'Pull a model in Ollama') + '</span>';
+                    }
                     return;
                 }
-                setConnected(true, serverBackend === 'pi' ? 'Pi' : 'Connected');
-                const backendNote = serverBackend === 'pi' ? ' · <span class="text-muted">Pi RPC</span>' : '';
-                modelInfo.innerHTML = '<span class="text-muted">Default:</span> <strong>' + escapeHtml(def) + '</strong>' + backendNote;
+                if (ollamaDown) {
+                    setConnected(false, 'Ollama not running');
+                    modelInfo.innerHTML = '<span class="text-error">Ollama is not running or not reachable. Leash is up, but the model runtime is down (start Ollama on the machine running Leash).</span>';
+                } else {
+                    setConnected(true, serverBackend === 'pi' ? 'Pi' : 'Connected');
+                    const backendNote = serverBackend === 'pi' ? ' · <span class="text-muted">Pi RPC</span>' : '';
+                    modelInfo.innerHTML = '<span class="text-muted">Default:</span> <strong>' + escapeHtml(def) + '</strong>' + backendNote;
+                }
             } catch (err) {
                 console.error(err);
                 setConnected(false, 'Offline');
@@ -308,7 +319,7 @@
                 busy = false;
                 sendBtn.disabled = false;
                 input.disabled = false;
-                setConnected(true, 'Connected');
+                await populateModels();
             }
         }
 
