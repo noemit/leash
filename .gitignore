@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+.DS_Store
+ollama_models/

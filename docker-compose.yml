@@ -1,0 +1,42 @@
+# Ollama Browser Wrapper - Docker Compose
+# ========== ==============================
+# For local machine (Mac/Linux/Windows), NOT Raspberry Pi hardware
+
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_DEBUG=false
+
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=qwen3.5:latest
+    depends_on:
+      - ollama
+    # volumes:
+    #   - ./server:/app/server
+
+  # Note: ngrok is separate (not managed by Docker)
+  # Run ngrok externally:
+  # ngrok http 8080
+
+# To disable docker for pure Python run:
+# Comment out both services above:
+#   # services:
+# And use:
+#   OLLAMA_HOST=http://localhost:11434
+#   # cd server && python api.py
