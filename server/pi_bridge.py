@@ -9,10 +9,69 @@ import asyncio
 import json
 import os
 import shlex
+import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+def _windows_npm_shim(head: str) -> Optional[Path]:
+    """Find pi.cmd / npx.cmd when PATH seen by Python omits %AppData%\\npm (common on Windows)."""
+    stem = Path(head).stem if head else head
+    if not stem:
+        return None
+    names = [f"{stem}.cmd", f"{stem}.exe", stem]
+    roots: List[Path] = []
+    ad = os.environ.get("APPDATA")
+    if ad:
+        roots.append(Path(ad) / "npm")
+    roots.append(Path.home() / "AppData" / "Roaming" / "npm")
+    for root in roots:
+        for n in names:
+            p = root / n
+            if p.is_file():
+                return p
+    return None
+
+
+def resolve_pi_argv(argv: List[str]) -> List[str]:
+    """Resolve the Pi CLI to a real executable path (Windows: pi.cmd vs pi)."""
+    if not argv:
+        raise RuntimeError("LEASH_PI_COMMAND parsed to an empty command.")
+    head, *rest = argv
+    p0 = Path(head)
+    if p0.is_file():
+        return [str(p0.resolve())] + rest
+
+    candidates = [head]
+    if sys.platform == "win32":
+        low = head.lower()
+        if not low.endswith((".exe", ".cmd", ".bat")):
+            candidates.extend([f"{head}.cmd", f"{head}.exe", f"{head}.bat"])
+
+    found: Optional[str] = None
+    for c in candidates:
+        w = shutil.which(c)
+        if w:
+            found = w
+            break
+
+    if not found and sys.platform == "win32":
+        shim = _windows_npm_shim(head)
+        if shim is not None:
+            found = str(shim.resolve())
+
+    if not found:
+        raise RuntimeError(
+            f"Cannot find Pi executable {head!r} on PATH (Windows needs pi.cmd from npm). "
+            "Install: npm install -g @mariozechner/pi-coding-agent. "
+            "Add npm global to PATH (often %AppData%\\npm), run Leash from the same environment "
+            "where `pi` works in a terminal, or set LEASH_PI_COMMAND to the full path, e.g. "
+            r'LEASH_PI_COMMAND="C:\Users\You\AppData\Roaming\npm\pi.cmd" --mode rpc --provider ollama --model qwen3.5:latest'
+        )
+    return [found] + rest
 
 
 def normalize_pi_cwd(raw: Optional[str]) -> str:
@@ -83,12 +142,20 @@ class PiBridge:
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
         )
-        self._argv = shlex.split(raw)
+        if sys.platform == "win32":
+            self._argv = shlex.split(raw, posix=False)
+        else:
+            self._argv = shlex.split(raw)
+        self._exec_argv = resolve_pi_argv(self._argv)
         self._stderr_task: Optional[asyncio.Task[None]] = None
 
     @property
     def argv(self) -> List[str]:
         return list(self._argv)
+
+    @property
+    def executable(self) -> str:
+        return self._exec_argv[0]
 
     @property
     def cwd(self) -> str:
@@ -101,7 +168,7 @@ class PiBridge:
         if self.is_running():
             return
         self._proc = await asyncio.create_subprocess_exec(
-            *self._argv,
+            *self._exec_argv,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
