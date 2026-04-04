@@ -102,12 +102,15 @@
         .status-dot.offline { background: var(--offline); border-color: var(--offline); }
         .model-info { font-size: 0.8rem; color: var(--text-muted); width: 100%; }
         .model-info strong { color: var(--text); font-weight: 600; }
-        .pi-folder-inline {
+        .status-toolbar {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             flex-shrink: 0;
             margin-left: 8px;
         }
         .pi-folder-inline[hidden] { display: none !important; }
-        .pi-folder-toggle {
+        .toolbar-icon-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -119,13 +122,19 @@
             color: var(--text);
             cursor: pointer;
             border-radius: 2px;
+            font-family: inherit;
         }
-        .pi-folder-toggle:hover { background: var(--user-msg); }
-        .pi-folder-toggle[aria-expanded="true"] {
+        .toolbar-icon-btn:hover { background: var(--user-msg); }
+        .toolbar-icon-btn[aria-expanded="true"] {
             background: var(--bg);
             border-color: var(--accent);
         }
-        .pi-folder-toggle svg { display: block; }
+        .toolbar-icon-btn svg { display: block; }
+        .toolbar-icon-btn .help-mark {
+            font-weight: 700;
+            font-size: 15px;
+            line-height: 1;
+        }
         .pi-folder-drawer {
             display: none;
             width: 100%;
@@ -137,6 +146,41 @@
         }
         .pi-folder-drawer.open { display: block; }
         .status-bar:not(.pi-mode) .pi-folder-drawer { display: none !important; }
+        .slash-help-drawer {
+            display: none;
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: var(--surface);
+            border: var(--line);
+            font-size: 0.78rem;
+        }
+        .slash-help-drawer.open { display: block; }
+        .slash-help-drawer h3 {
+            font-size: 0.88rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+        .slash-help-drawer .slash-cmd-list { margin: 0; }
+        .slash-help-drawer .slash-cmd-list dt {
+            margin-top: 10px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .slash-help-drawer .slash-cmd-list dt:first-child { margin-top: 0; }
+        .slash-help-drawer .slash-cmd-list dd {
+            margin: 4px 0 0 0;
+            padding-left: 0;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+        .slash-help-drawer code {
+            font-size: 0.8rem;
+            background: var(--bg);
+            padding: 1px 5px;
+            border: var(--line);
+        }
         .pi-folder-drawer label {
             display: block;
             color: var(--text-muted);
@@ -259,11 +303,22 @@
                     <span class="status-dot offline" id="connection-dot"></span>
                     <span id="status-text">Connecting…</span>
                 </div>
-                <div id="pi-folder-bar" class="pi-folder-inline" hidden>
-                    <button type="button" id="pi-folder-toggle" class="pi-folder-toggle" aria-expanded="false" aria-controls="pi-folder-drawer" title="Working folder (under LEASH_PI_CWD)">
+                <div class="status-toolbar">
+                    <div id="pi-folder-bar" class="pi-folder-inline" hidden>
+                        <button type="button" id="pi-folder-toggle" class="toolbar-icon-btn" aria-expanded="false" aria-controls="pi-folder-drawer" title="Working folder (under LEASH_PI_CWD)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <button type="button" id="clear-chat-btn" class="toolbar-icon-btn" title="Clear conversation (same as /clear)" aria-label="Clear conversation">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
                         </svg>
+                    </button>
+                    <button type="button" id="cmd-help-toggle" class="toolbar-icon-btn" aria-expanded="false" aria-controls="slash-help-drawer" title="Slash commands" aria-label="Command help">
+                        <span class="help-mark" aria-hidden="true">?</span>
                     </button>
                 </div>
             </div>
@@ -275,6 +330,17 @@
                 </div>
                 <span class="pi-ws-hint" id="pi-workspace-hint"></span>
             </div>
+            <div id="slash-help-drawer" class="slash-help-drawer" role="region" aria-label="Slash commands">
+                <h3>Slash commands</h3>
+                <p class="text-muted" style="font-size:0.74rem;margin-bottom:8px;">Send with the Send button (same as a normal message).</p>
+                <dl class="slash-cmd-list">
+                    <dt><code>/clear</code> · <code>/reset</code></dt>
+                    <dd>Clear this chat. In Pi mode, also starts a new agent session when the server can reach Pi.</dd>
+                    <dt><code>/help</code> · <code>/commands</code></dt>
+                    <dd>Open this panel.</dd>
+                </dl>
+                <p class="text-muted" style="font-size:0.72rem;margin-top:10px;">Toolbar: folder (Pi only), trash = clear, <strong>?</strong> = this help.</p>
+            </div>
             <div class="model-info" id="model-info"></div>
         </div>
 
@@ -283,7 +349,7 @@
         <div class="composer">
             <div class="input-area">
                 <div class="input-wrapper">
-                    <textarea id="user-input" placeholder="Message…" autocomplete="off" aria-label="Message input"></textarea>
+                    <textarea id="user-input" placeholder="Message…  /help for commands" autocomplete="off" aria-label="Message input"></textarea>
                 </div>
                 <button type="button" id="send-btn">Send</button>
             </div>
@@ -305,8 +371,12 @@
         const piSubpathBtn = document.getElementById('pi-subpath-btn');
         const piWorkspaceHint = document.getElementById('pi-workspace-hint');
         const statusBarEl = document.getElementById('status-bar');
+        const clearChatBtn = document.getElementById('clear-chat-btn');
+        const cmdHelpToggle = document.getElementById('cmd-help-toggle');
+        const slashHelpDrawer = document.getElementById('slash-help-drawer');
 
         let busy = false;
+        let clearing = false;
         let serverBackend = 'ollama';
         let availableModels = [];
         let selectedModel = '';
@@ -319,15 +389,61 @@
             return d.innerHTML;
         }
 
+        function setHelpDrawerOpen(open) {
+            cmdHelpToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            slashHelpDrawer.classList.toggle('open', open);
+            if (open) setPiDrawerOpen(false);
+        }
+
         function setPiDrawerOpen(open) {
             piFolderToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
             piFolderDrawer.classList.toggle('open', open);
+            if (open) setHelpDrawerOpen(false);
         }
 
         piFolderToggle.addEventListener('click', () => {
             const next = piFolderToggle.getAttribute('aria-expanded') !== 'true';
             setPiDrawerOpen(next);
         });
+
+        cmdHelpToggle.addEventListener('click', () => {
+            const next = cmdHelpToggle.getAttribute('aria-expanded') !== 'true';
+            setHelpDrawerOpen(next);
+        });
+
+        clearChatBtn.addEventListener('click', () => { void clearContext(); });
+
+        async function clearContext() {
+            if (clearing) return;
+            clearing = true;
+            clearChatBtn.disabled = true;
+            try {
+                const r = await fetch(API_BASE + '/api/session/reset', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    const d = data.detail != null
+                        ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))
+                        : 'Clear failed';
+                    addMessage('system', d, false);
+                    return;
+                }
+                conversationHistory = Array.isArray(data.messages) ? data.messages : [];
+                renderFromServer(conversationHistory);
+                let note = 'Conversation cleared.';
+                if (data.pi_new_session_warning) {
+                    note += ' Pi note: ' + data.pi_new_session_warning;
+                }
+                addMessage('system', note, false);
+            } catch (e) {
+                addMessage('system', e.message || 'Clear failed', false);
+            } finally {
+                clearing = false;
+                clearChatBtn.disabled = false;
+            }
+        }
 
         function addMessage(role, htmlOrText, asHtml) {
             const div = document.createElement('div');
@@ -458,7 +574,27 @@
 
         async function sendMessage() {
             const text = input.value.trim();
-            if (!text || busy || !selectedModel) return;
+            if (!text) return;
+
+            if (text.startsWith('/')) {
+                const firstLine = text.split('\n').map(function (l) { return l.trim(); }).find(Boolean) || text;
+                const parts = firstLine.trim().split(/\s+/);
+                const cmd = parts[0].toLowerCase();
+                input.value = '';
+                if (cmd === '/clear' || cmd === '/reset') {
+                    await clearContext();
+                    return;
+                }
+                if (cmd === '/help' || cmd === '/commands') {
+                    setHelpDrawerOpen(true);
+                    return;
+                }
+                if (busy) return;
+                addMessage('system', 'Unknown command: ' + cmd + '. Try /help or tap ?.', false);
+                return;
+            }
+
+            if (busy || !selectedModel) return;
 
             input.value = '';
             busy = true;

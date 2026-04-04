@@ -273,6 +273,29 @@ async def get_session(request: Request):
     return resp
 
 
+@app.post("/api/session/reset")
+async def reset_session(request: Request):
+    """Clear in-memory transcript for this session; Pi mode also starts a new Pi RPC session (best effort)."""
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    SESSION_MESSAGES[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    pi_session_note: Optional[str] = None
+    if BACKEND == "pi" and pi_bridge:
+        try:
+            await pi_bridge.new_session()
+        except RuntimeError as e:
+            pi_session_note = str(e)
+    body: Dict[str, Any] = {
+        "ok": True,
+        "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+    }
+    if pi_session_note:
+        body["pi_new_session_warning"] = pi_session_note
+    resp = JSONResponse(body)
+    _set_session_cookie(resp, sid)
+    return resp
+
+
 @app.post("/api/chat")
 async def chat(request: Request, body: ChatTurnBody):
     raw_sid = request.cookies.get(SESSION_COOKIE)
