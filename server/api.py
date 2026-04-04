@@ -11,28 +11,53 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
+from pi_bridge import PiBridge, last_user_text
+
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:latest"))
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 CHAT_TIMEOUT = int(os.getenv("CHAT_TIMEOUT_SEC", "300"))
+BACKEND = os.getenv("LEASH_BACKEND", "ollama").strip().lower()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
 
+pi_bridge: Optional[PiBridge] = None
+if BACKEND == "pi":
+    pi_bridge = PiBridge()
+
+
+def _pi_model_label() -> str:
+    """Label for JSON/UI: prefer `--model` from LEASH_PI_COMMAND, else OLLAMA_MODEL."""
+    if not pi_bridge:
+        return MODEL_NAME
+    argv = pi_bridge.argv
+    for i, a in enumerate(argv):
+        if a == "--model" and i + 1 < len(argv):
+            return argv[i + 1]
+    return MODEL_NAME
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    models = await get_available_models()
-    if models:
-        print(f"[API] Found models: {', '.join(models)}")
-        print(f"[API] Default model: {MODEL_NAME}")
+    if BACKEND == "pi" and pi_bridge:
+        print(f"[API] Backend: Pi (RPC)  cwd={pi_bridge.cwd}")
+        print(f"[API] Pi command: {' '.join(pi_bridge.argv)}")
+        print(f"[API] Pi model (from --model / OLLAMA_MODEL): {_pi_model_label()}")
     else:
-        print(f"[API] No models in Ollama yet. Example: ollama pull {MODEL_NAME}")
+        models = await get_available_models()
+        if models:
+            print(f"[API] Backend: Ollama  models: {', '.join(models)}")
+        else:
+            print(f"[API] Backend: Ollama  (no models yet; try: ollama pull {MODEL_NAME})")
+        print(f"[API] Default model: {MODEL_NAME}")
     yield
+    if pi_bridge:
+        await pi_bridge.shutdown()
 
 
-app = FastAPI(title="Phone Harness — Ollama", version="1.1", lifespan=lifespan)
+app = FastAPI(title="Leash", version="1.2", lifespan=lifespan)
 
 
 class ChatBody(BaseModel):
@@ -58,7 +83,7 @@ def resolve_model(requested: Optional[str]) -> str:
     return requested if requested else MODEL_NAME
 
 
-async def process_message(model_name: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def process_message_ollama(model_name: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
     payload = {
         "model": model_name,
         "messages": messages,
@@ -89,9 +114,25 @@ async def process_message(model_name: str, messages: List[Dict[str, Any]]) -> Di
 
 @app.get("/health")
 async def health_check():
+    if BACKEND == "pi" and pi_bridge:
+        label = _pi_model_label()
+        out: Dict[str, Any] = {
+            "status": "online",
+            "backend": BACKEND,
+            "models": [label],
+            "current_default": label,
+            "timestamp": datetime.now().isoformat(),
+            "pi": {
+                "running": pi_bridge.is_running(),
+                "cwd": pi_bridge.cwd,
+                "command": pi_bridge.argv,
+            },
+        }
+        return out
     models = await get_available_models()
     return {
         "status": "online",
+        "backend": BACKEND,
         "models": models,
         "current_default": MODEL_NAME,
         "timestamp": datetime.now().isoformat(),
@@ -100,12 +141,47 @@ async def health_check():
 
 @app.get("/models")
 async def list_models():
+    if BACKEND == "pi" and pi_bridge:
+        label = _pi_model_label()
+        return {"models": [label], "current_default": label, "backend": BACKEND}
     models = await get_available_models()
-    return {"models": models, "current_default": MODEL_NAME}
+    return {"models": models, "current_default": MODEL_NAME, "backend": BACKEND}
+
+
+@app.post("/api/pi/new-session")
+async def pi_new_session():
+    if BACKEND != "pi" or not pi_bridge:
+        raise HTTPException(
+            status_code=400,
+            detail="Pi backend not enabled (set LEASH_BACKEND=pi).",
+        )
+    try:
+        await pi_bridge.new_session()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"ok": True}
 
 
 @app.post("/api/chat")
 async def chat(body: ChatBody):
+    if BACKEND == "pi":
+        if not pi_bridge:
+            raise HTTPException(status_code=500, detail="Pi bridge not initialized")
+        user_txt = last_user_text(body.messages)
+        if not user_txt:
+            raise HTTPException(status_code=400, detail="No user message to send to Pi")
+        try:
+            text = await pi_bridge.prompt(user_txt, float(CHAT_TIMEOUT))
+        except TimeoutError:
+            raise HTTPException(status_code=504, detail="Pi timed out before finishing the turn")
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        return {
+            "response": text,
+            "model": _pi_model_label(),
+            "timestamp": datetime.now().isoformat(),
+        }
+
     model_name = resolve_model(body.model)
     models = await get_available_models()
     if models and model_name not in models:
@@ -114,7 +190,7 @@ async def chat(body: ChatBody):
             status_code=404,
             detail=f"Model '{model_name}' not found. Available: {available}",
         )
-    return await process_message(model_name, body.messages)
+    return await process_message_ollama(model_name, body.messages)
 
 
 @app.get("/")
@@ -131,5 +207,7 @@ if WEB_DIR.is_dir():
 
 if __name__ == "__main__":
     print(f"[API] Listening on http://{HOST}:{PORT}")
-    print(f"[API] Ollama: {OLLAMA_HOST}  default model: {MODEL_NAME}")
+    print(f"[API] LEASH_BACKEND={BACKEND}")
+    if BACKEND != "pi":
+        print(f"[API] Ollama: {OLLAMA_HOST}")
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")

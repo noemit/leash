@@ -15,9 +15,9 @@ HOST=0.0.0.0  # Allow external access
 
 ## Quick Start (from phone-harness folder)
 
-1. **Navigate to wrapper folder:**
+1. **Navigate to your clone of this repo:**
    ```bash
-   cd /Users/noemititarenco/phone-harness
+   cd ~/phone-harness   # or: cd path/to/leash
    ```
 
 2. **Install dependencies (once only):**

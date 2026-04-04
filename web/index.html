@@ -3,50 +3,184 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phone Harness — Qwen / Ollama</title>
+    <title>Leash</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Datatype:wght@100..900&family=Iosevka+Charon:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Teachers:ital,wght@0,400..800;1,400..800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #ebe4e8;
+            --surface: #f3eef1;
+            --text: #3a3438;
+            --text-muted: #6f666b;
+            --accent: #8f5a72;
+            --accent-hover: #7a4d62;
+            --border: #c9b9c2;
+            --user-msg: #e2d7dd;
+            --ai-msg: #f7f2f5;
+            --system-msg-bg: #d9cdd4;
+            --online: #4a7c59;
+            --offline: #a85a6e;
+            --hot-pink: #ff1493;
+            --line: 1px solid var(--border);
+            --chat-border: 3px solid var(--hot-pink);
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; padding: 16px; line-height: 1.6; }
-        .container { max-width: 800px; margin: 0 auto; }
-        header { text-align: center; margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; position: relative; }
-        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 8px; position: relative; z-index: 1; }
-        .subtitle { font-size: 0.875rem; opacity: 0.9; position: relative; z-index: 1; }
-        .controls { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; }
-        .control-btn { padding: 6px 10px; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: none; border-radius: 6px; color: #fff; cursor: pointer; text-align: center; min-width: 80px; }
-        .control-btn:hover { background: rgba(255,255,255,0.2); }
-        .model-dropdown { position: absolute; top: 40px; right: 12px; background: #2d2d44; border-radius: 8px; padding: 8px; z-index: 100; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-height: 240px; overflow-y: auto; min-width: 200px; text-align: left; }
+        body {
+            font-family: 'Datatype', 'Teachers', 'Roboto', 'Iosevka Charon', ui-monospace, monospace;
+            background: var(--bg);
+            color: var(--text);
+            padding: 16px;
+            line-height: 1.55;
+            min-height: 100dvh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: var(--line);
+            padding: 16px;
+            background: var(--surface);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: var(--bg);
+            position: relative;
+            border: var(--line);
+        }
+        h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+        .subtitle { font-size: 0.8125rem; color: var(--text-muted); max-width: 28rem; margin: 0 auto; }
+        .controls { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .control-btn {
+            padding: 6px 10px;
+            font-size: 0.75rem;
+            font-family: inherit;
+            background: var(--surface);
+            border: var(--line);
+            color: var(--text);
+            cursor: pointer;
+            text-align: center;
+            min-width: 80px;
+        }
+        .control-btn:hover { background: var(--bg); }
+        .model-dropdown {
+            position: absolute;
+            top: 36px;
+            right: 8px;
+            background: var(--surface);
+            padding: 8px;
+            z-index: 100;
+            display: none;
+            border: var(--line);
+            max-height: 240px;
+            overflow-y: auto;
+            min-width: 200px;
+            text-align: left;
+        }
         .model-dropdown.show { display: block; }
-        .model-dropdown h4 { margin-bottom: 8px; font-size: 0.85rem; color: #888; padding-bottom: 4px; border-bottom: 1px solid #444; }
-        .model-option { padding: 6px 10px; margin-bottom: 2px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; color: #eee; word-break: break-all; }
-        .model-option:hover { background: rgba(102,126,234,0.6); }
-        .model-option.selected { background: #667eea; }
-        .status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px; background: #2d2d44; border-radius: 8px; font-size: 0.8rem; gap: 12px; flex-wrap: wrap; }
-        .status-indicator { display: inline-flex; align-items: center; gap: 6px; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #667eea; flex-shrink: 0; }
-        .status-dot.online { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
-        .status-dot.offline { background: #ef4444; }
-        .message-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: min(55vh, 480px); overflow-y: auto; padding-right: 4px; }
-        .message { padding: 12px 16px; border-radius: 12px; line-height: 1.5; word-wrap: break-word; animation: fadeIn 0.3s ease; white-space: pre-wrap; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-        .message.user { background: #3a3a5c; align-self: flex-end; }
-        .message.ai { background: #2d2d44; align-self: flex-start; }
-        .message.system { background: #1e1e30; align-self: center; font-size: 0.85rem; color: #888; }
+        .model-dropdown h4 { margin-bottom: 8px; font-size: 0.85rem; color: var(--text-muted); padding-bottom: 6px; border-bottom: var(--line); }
+        .model-option {
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            color: var(--text);
+            word-break: break-all;
+            border: 1px solid transparent;
+        }
+        .model-option:hover { background: var(--surface); border-color: var(--border); }
+        .model-option.selected { background: var(--user-msg); border-color: var(--border); font-weight: 600; }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: var(--bg);
+            font-size: 0.8rem;
+            gap: 12px;
+            flex-wrap: wrap;
+            border: var(--line);
+        }
+        .status-indicator { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+            border: var(--line);
+            background: var(--surface);
+        }
+        .status-dot.online { background: var(--online); }
+        .status-dot.offline { background: var(--offline); }
+        .message-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+            max-height: min(55vh, 480px);
+            overflow-y: auto;
+            padding: 8px;
+            border: var(--line);
+            background: var(--bg);
+        }
+        .message {
+            padding: 10px 12px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: fadeIn 0.2s ease;
+            white-space: pre-wrap;
+            border: var(--line);
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .message.user { background: var(--user-msg); align-self: flex-end; color: var(--text); }
+        .message.ai { background: var(--ai-msg); align-self: flex-start; color: var(--text); }
+        .message.system { background: var(--system-msg-bg); align-self: center; font-size: 0.85rem; color: var(--text-muted); }
         .input-area { display: flex; gap: 8px; margin-top: 12px; align-items: flex-end; }
-        .input-wrapper { flex: 1; position: relative; }
-        textarea { width: 100%; padding: 12px 16px; border: none; border-radius: 8px; background: #2d2d44; color: #fff; font-size: 1rem; resize: vertical; min-height: 52px; max-height: 160px; }
-        textarea:focus { outline: 2px solid #667eea; }
-        button { padding: 12px 24px; border: none; border-radius: 8px; background: #667eea; color: white; font-weight: 600; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
-        button:hover { background: #5865f2; }
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+            border: var(--chat-border);
+            background: var(--surface);
+        }
+        textarea#user-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 52px;
+            max-height: 160px;
+        }
+        textarea#user-input::placeholder { color: var(--text-muted); opacity: 0.85; }
+        textarea#user-input:focus { outline: none; }
+        #send-btn {
+            padding: 12px 20px;
+            border: var(--line);
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        #send-btn:hover { background: var(--accent-hover); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .model-status { font-size: 0.75rem; margin-top: 8px; color: #888; }
-        .footer-hint { margin-top: 12px; font-size: 0.75rem; color: #666; text-align: center; }
+        .model-status { font-size: 0.75rem; margin-top: 10px; color: var(--text-muted); border-top: var(--line); padding-top: 8px; }
+        .footer-hint { margin-top: 12px; font-size: 0.75rem; color: var(--text-muted); text-align: center; border: var(--line); padding: 8px; background: var(--bg); }
+        .text-muted { color: var(--text-muted); }
+        .text-error { color: var(--offline); }
+        .model-info strong { color: var(--text); font-weight: 700; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Phone harness</h1>
-            <p class="subtitle">Local Ollama (e.g. Qwen 3.5) — open this page from your tunnel URL</p>
+            <p class="subtitle" id="page-subtitle">Local Ollama (e.g. Qwen 3.5) — open this page from your tunnel URL</p>
             <div class="controls">
                 <button type="button" class="control-btn" id="model-btn">Model</button>
                 <button type="button" class="control-btn" id="clear-btn">Clear</button>
@@ -95,6 +229,7 @@
         const sendBtn = document.getElementById('send-btn');
 
         let busy = false;
+        let serverBackend = 'ollama';
         let availableModels = [];
         let selectedModel = '';
         let conversationHistory = [
@@ -168,11 +303,21 @@
                 const data = await response.json();
                 if (!response.ok || !Array.isArray(data.models)) {
                     setConnected(false, 'API error');
-                    modelInfo.innerHTML = '<span style="color:#e94560">Could not list models</span>';
+                    modelInfo.innerHTML = '<span class="text-error">Could not list models</span>';
                     return;
                 }
-                availableModels = data.models;
+                serverBackend = data.backend || 'ollama';
+                const sub = document.getElementById('page-subtitle');
+                if (sub) {
+                    sub.textContent = serverBackend === 'pi'
+                        ? 'Pi coding agent (RPC) — same folder as LEASH_PI_CWD on the server'
+                        : 'Local Ollama (e.g. Qwen 3.5) — open this page from your tunnel URL';
+                }
+                availableModels = data.models.slice();
                 const def = data.current_default || '';
+                if (serverBackend === 'pi' && availableModels.length === 0 && def) {
+                    availableModels = [def];
+                }
                 const saved = localStorage.getItem('ollama_model');
                 if (saved && availableModels.includes(saved)) {
                     selectModel(saved);
@@ -182,17 +327,18 @@
                     selectModel(availableModels[0]);
                 } else {
                     modelBadge.textContent = 'Model: (none)';
-                    modelNameEl.textContent = 'Run ollama pull …';
+                    modelNameEl.textContent = serverBackend === 'pi' ? 'Set LEASH_PI_COMMAND' : 'Run ollama pull …';
                     setConnected(true, 'API up — no models');
-                    modelInfo.innerHTML = '<span style="color:#888">Pull a model in Ollama</span>';
+                    modelInfo.innerHTML = '<span class="text-muted">' + (serverBackend === 'pi' ? 'Pi: ensure ollama provider / model in env' : 'Pull a model in Ollama') + '</span>';
                     return;
                 }
-                setConnected(true, 'Connected');
-                modelInfo.innerHTML = '<span style="color:#888">Default:</span> <strong>' + escapeHtml(def) + '</strong>';
+                setConnected(true, serverBackend === 'pi' ? 'Pi' : 'Connected');
+                const backendNote = serverBackend === 'pi' ? ' · <span class="text-muted">Pi RPC</span>' : '';
+                modelInfo.innerHTML = '<span class="text-muted">Default:</span> <strong>' + escapeHtml(def) + '</strong>' + backendNote;
             } catch (err) {
                 console.error(err);
                 setConnected(false, 'Offline');
-                modelInfo.innerHTML = '<span style="color:#e94560">' + escapeHtml(err.message) + '</span>';
+                modelInfo.innerHTML = '<span class="text-error">' + escapeHtml(err.message) + '</span>';
             }
         }
 
@@ -251,9 +397,20 @@
             }
         }
 
-        function clearMessages() {
+        async function clearMessages() {
+            if (serverBackend === 'pi') {
+                try {
+                    const r = await fetch(API_BASE + '/api/pi/new-session', { method: 'POST' });
+                    if (!r.ok) {
+                        const t = await r.text();
+                        console.warn('Pi new-session:', r.status, t);
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
             messageList.innerHTML = '';
-            addMessage('system', 'History cleared.', false);
+            addMessage('system', serverBackend === 'pi' ? 'Pi session cleared.' : 'History cleared.', false);
             conversationHistory = [
                 { role: 'system', content: 'You are a helpful assistant. Answer clearly and concisely.' }
             ];
