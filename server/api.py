@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -8,12 +9,13 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
+from starlette.responses import Response
 
-from pi_bridge import PiBridge
+from pi_bridge import PiBridge, map_pi_messages_to_leash
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:latest"))
@@ -80,7 +82,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Leash", version="1.2", lifespan=lifespan)
 
 
-def _set_session_cookie(resp: JSONResponse, sid: str) -> None:
+def _set_session_cookie(resp: Response, sid: str) -> None:
     resp.set_cookie(
         SESSION_COOKIE,
         sid,
@@ -89,6 +91,10 @@ def _set_session_cookie(resp: JSONResponse, sid: str) -> None:
         max_age=SESSION_MAX_AGE,
         path="/",
     )
+
+
+def _ndjson_line(obj: Dict[str, Any]) -> bytes:
+    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def _ensure_session(sid: Optional[str]) -> str:
@@ -170,6 +176,65 @@ async def process_message_ollama(model_name: str, messages: List[Dict[str, Any]]
         }
     except aiohttp.ClientError as e:
         raise HTTPException(status_code=503, detail=f"Ollama connection error: {e!s}")
+
+
+async def iter_ollama_stream(model_name: str, messages: List[Dict[str, Any]]):
+    """Yield {kind: delta, text} chunks then {kind: ollama_done, response, model, timestamp}."""
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "stream": True,
+        "options": {"temperature": 0.7, "top_p": 0.9},
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{OLLAMA_HOST}/api/chat",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=CHAT_TIMEOUT),
+            ) as resp:
+                if resp.status != 200:
+                    err = await resp.text()
+                    raise RuntimeError(err or "Ollama error")
+                pieces: List[str] = []
+                last_model = model_name
+                while True:
+                    raw_line = await resp.content.readline()
+                    if not raw_line:
+                        break
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        continue
+                    msg = data.get("message") or {}
+                    if isinstance(msg, dict):
+                        piece = msg.get("content") or ""
+                        if isinstance(piece, str) and piece:
+                            pieces.append(piece)
+                            yield {"kind": "delta", "text": piece}
+                    if data.get("model"):
+                        last_model = str(data.get("model") or last_model)
+                    if data.get("done"):
+                        full = "".join(pieces)
+                        yield {
+                            "kind": "ollama_done",
+                            "response": full,
+                            "model": last_model,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                        return
+                full = "".join(pieces)
+                yield {
+                    "kind": "ollama_done",
+                    "response": full,
+                    "model": last_model,
+                    "timestamp": datetime.now().isoformat(),
+                }
+    except aiohttp.ClientError as e:
+        raise RuntimeError(f"Ollama connection error: {e!s}") from e
 
 
 @app.get("/health")
@@ -349,6 +414,132 @@ async def chat(request: Request, body: ChatTurnBody):
     resp_body["messages"] = copy.deepcopy(msgs)
 
     resp = JSONResponse(resp_body)
+    _set_session_cookie(resp, sid)
+    return resp
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: Request, body: ChatTurnBody):
+    """NDJSON stream: ack, delta/thinking/tool events, then done with full messages snapshot."""
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    user_txt = str(body.content).strip()
+    if not user_txt:
+        raise HTTPException(status_code=400, detail="Empty message")
+
+    model_name = resolve_model(body.model)
+
+    async def ndjson_body():
+        buf = SESSION_MESSAGES[sid]
+        if BACKEND != "pi":
+            models = await get_available_models()
+            if models and model_name not in models:
+                available = ", ".join(models) if models else "none"
+                yield _ndjson_line(
+                    {
+                        "event": "error",
+                        "detail": f"Model '{model_name}' not found. Available: {available}",
+                    }
+                )
+                return
+
+        buf.append({"role": "user", "content": user_txt})
+        yield _ndjson_line({"event": "ack"})
+
+        try:
+            if BACKEND == "pi":
+                if not pi_bridge:
+                    raise RuntimeError("Pi bridge not initialized")
+                async for ev in pi_bridge.prompt_stream(user_txt, float(CHAT_TIMEOUT)):
+                    k = ev.get("kind")
+                    if k == "text_delta":
+                        yield _ndjson_line(
+                            {"event": "delta", "text": ev.get("delta", "")}
+                        )
+                    elif k == "thinking_delta":
+                        yield _ndjson_line(
+                            {"event": "thinking", "text": ev.get("delta", "")}
+                        )
+                    elif k == "tool":
+                        out: Dict[str, Any] = {
+                            "event": "tool",
+                            "phase": ev.get("phase"),
+                            "toolCallId": ev.get("toolCallId"),
+                            "toolName": ev.get("toolName"),
+                        }
+                        if ev.get("args") is not None:
+                            out["args"] = ev["args"]
+                        if ev.get("partialResult") is not None:
+                            out["partialResult"] = ev["partialResult"]
+                        if ev.get("result") is not None:
+                            out["result"] = ev["result"]
+                        if ev.get("isError") is not None:
+                            out["isError"] = ev["isError"]
+                        yield _ndjson_line(out)
+                    elif k == "turn_done":
+                        mapped = map_pi_messages_to_leash(
+                            ev.get("pi_messages"), SYSTEM_PROMPT
+                        )
+                        if mapped:
+                            SESSION_MESSAGES[sid] = mapped
+                        else:
+                            SESSION_MESSAGES[sid].append(
+                                {
+                                    "role": "assistant",
+                                    "content": str(ev.get("assistant_text") or ""),
+                                }
+                            )
+                        yield _ndjson_line(
+                            {
+                                "event": "done",
+                                "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+                                "model": _pi_model_label(),
+                                "timestamp": datetime.now().isoformat(),
+                            }
+                        )
+                        return
+                raise RuntimeError("Pi stream ended without turn_done")
+            else:
+                full_text = ""
+                final_model = model_name
+                ts = datetime.now().isoformat()
+                async for ev in iter_ollama_stream(model_name, buf):
+                    if ev.get("kind") == "delta":
+                        t = ev.get("text", "")
+                        full_text += t
+                        yield _ndjson_line({"event": "delta", "text": t})
+                    elif ev.get("kind") == "ollama_done":
+                        full_text = ev.get("response") or full_text
+                        final_model = ev.get("model", model_name)
+                        ts = ev.get("timestamp", ts)
+                        break
+                SESSION_MESSAGES[sid].append(
+                    {"role": "assistant", "content": full_text}
+                )
+                yield _ndjson_line(
+                    {
+                        "event": "done",
+                        "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+                        "model": final_model,
+                        "timestamp": ts,
+                    }
+                )
+        except TimeoutError:
+            SESSION_MESSAGES[sid].pop()
+            yield _ndjson_line(
+                {
+                    "event": "error",
+                    "detail": "Pi timed out before finishing the turn",
+                }
+            )
+        except RuntimeError as e:
+            SESSION_MESSAGES[sid].pop()
+            yield _ndjson_line({"event": "error", "detail": str(e)})
+        except Exception as e:
+            SESSION_MESSAGES[sid].pop()
+            yield _ndjson_line({"event": "error", "detail": str(e)})
+
+    resp = StreamingResponse(ndjson_body(), media_type="application/x-ndjson")
     _set_session_cookie(resp, sid)
     return resp
 

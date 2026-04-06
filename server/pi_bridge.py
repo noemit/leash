@@ -14,7 +14,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 
 def _windows_npm_shim(head: str) -> Optional[Path]:
@@ -127,6 +127,55 @@ def _parse_stdout_line(line: bytes) -> Optional[Dict[str, Any]]:
         return json.loads(line.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
+
+
+def flatten_agent_message_content(content: Any) -> str:
+    """Turn Pi AgentMessage content (string or content blocks) into plain text for Leash storage."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts: List[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        t = block.get("type")
+        if t == "text":
+            tx = block.get("text")
+            if isinstance(tx, str) and tx:
+                parts.append(tx)
+        elif t in ("tool_use", "toolUse"):
+            name = block.get("name") or block.get("toolName") or "tool"
+            parts.append(f"[tool: {name}]")
+        elif t in ("tool_result", "toolResult"):
+            tr = block.get("content")
+            if isinstance(tr, str):
+                parts.append(tr)
+            elif isinstance(tr, list):
+                parts.append(flatten_agent_message_content(tr))
+    return "\n".join(parts).strip()
+
+
+def map_pi_messages_to_leash(
+    pi_messages: Optional[List[Any]], system_prompt: str
+) -> Optional[List[Dict[str, Any]]]:
+    """Map Pi get_messages payload to Leash {role, content} list; prepend system if missing."""
+    if not pi_messages or not isinstance(pi_messages, list):
+        return None
+    out: List[Dict[str, Any]] = []
+    for m in pi_messages:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        if role not in ("user", "assistant", "system"):
+            continue
+        text = flatten_agent_message_content(m.get("content"))
+        out.append({"role": str(role), "content": text})
+    if not out:
+        return None
+    if out[0].get("role") != "system":
+        out.insert(0, {"role": "system", "content": system_prompt})
+    return out
 
 
 def _assistant_text_from_agent_end(obj: Dict[str, Any]) -> str:
@@ -289,8 +338,10 @@ class PiBridge:
                 err = r.get("error") or r.get("message") or str(r)
                 raise RuntimeError(f"new_session failed: {err}")
 
-    async def prompt(self, message: str, timeout: float) -> str:
-        """Send user text to Pi. Model comes only from `LEASH_PI_COMMAND` (`--model …`), not RPC."""
+    async def prompt_stream(
+        self, message: str, timeout: float
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream Pi RPC events for one prompt (holds lock until agent_end). Yields a final turn_done."""
         async with self._lock:
             await self.ensure_running()
             assert self._proc and self._proc.stdin
@@ -330,11 +381,42 @@ class PiBridge:
 
                 if t == "message_update":
                     ev = obj.get("assistantMessageEvent") or {}
-                    if ev.get("type") == "text_delta":
+                    et = ev.get("type")
+                    if et == "text_delta":
                         d = ev.get("delta")
                         if isinstance(d, str):
                             text_parts.append(d)
+                            yield {"kind": "text_delta", "delta": d}
+                    elif et == "thinking_delta":
+                        d = ev.get("delta")
+                        if isinstance(d, str):
+                            yield {"kind": "thinking_delta", "delta": d}
+                elif t == "tool_execution_start":
+                    yield {
+                        "kind": "tool",
+                        "phase": "start",
+                        "toolCallId": obj.get("toolCallId"),
+                        "toolName": obj.get("toolName"),
+                        "args": obj.get("args"),
+                    }
+                elif t == "tool_execution_update":
+                    yield {
+                        "kind": "tool",
+                        "phase": "update",
+                        "toolCallId": obj.get("toolCallId"),
+                        "toolName": obj.get("toolName"),
+                        "args": obj.get("args"),
+                        "partialResult": obj.get("partialResult"),
+                    }
                 elif t == "tool_execution_end":
+                    yield {
+                        "kind": "tool",
+                        "phase": "end",
+                        "toolCallId": obj.get("toolCallId"),
+                        "toolName": obj.get("toolName"),
+                        "result": obj.get("result"),
+                        "isError": obj.get("isError"),
+                    }
                     name = obj.get("toolName") or "tool"
                     result = obj.get("result") or {}
                     content = result.get("content") or []
@@ -357,11 +439,40 @@ class PiBridge:
                         body = (body or "(Pi finished — tool output below.)") + "".join(
                             tool_blocks
                         )
-                    return body or "(empty reply)"
+                    assistant_text = body or "(empty reply)"
+
+                    pi_messages: Optional[List[Any]] = None
+                    gm_timeout = min(60.0, max(1.0, deadline - time.monotonic()))
+                    try:
+                        gr = await self.rpc_transact(
+                            {"type": "get_messages"},
+                            timeout=gm_timeout,
+                        )
+                        if gr.get("success", True) and isinstance(gr.get("data"), dict):
+                            raw = gr["data"].get("messages")
+                            if isinstance(raw, list):
+                                pi_messages = raw
+                    except Exception:
+                        pass
+
+                    yield {
+                        "kind": "turn_done",
+                        "assistant_text": assistant_text,
+                        "pi_messages": pi_messages,
+                        "agent_end": obj,
+                    }
+                    return
 
                 elif t == "extension_error":
                     err = obj.get("error") or str(obj)
                     raise RuntimeError(f"Pi extension error: {err}")
+
+    async def prompt(self, message: str, timeout: float) -> str:
+        """Send user text to Pi. Model comes only from `LEASH_PI_COMMAND` (`--model …`), not RPC."""
+        async for ev in self.prompt_stream(message, timeout):
+            if ev.get("kind") == "turn_done":
+                return str(ev.get("assistant_text") or "(empty reply)")
+        raise RuntimeError("Pi prompt ended without turn_done")
 
     async def shutdown(self) -> None:
         # Do not take _lock: a long prompt would block app shutdown forever.

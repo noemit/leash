@@ -221,28 +221,160 @@
             word-break: break-all;
             margin-top: 8px;
         }
+        .chat-scroll-wrap {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
         .message-list {
             flex: 1;
-            min-height: 120px;
+            min-height: 0;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 8px;
             padding: 8px 0;
+            padding-bottom: 12px;
             -webkit-overflow-scrolling: touch;
+        }
+        .scroll-down-hint {
+            position: absolute;
+            bottom: 8px;
+            right: 10px;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: var(--line);
+            background: var(--surface);
+            color: var(--accent);
+            box-shadow: 0 4px 14px rgba(58, 52, 56, 0.18);
+            cursor: pointer;
+            z-index: 4;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            animation: scrollHintBounce 1.15s ease-in-out infinite;
+        }
+        .scroll-down-hint[hidden] {
+            display: none !important;
+        }
+        .scroll-down-hint:not([hidden]) {
+            display: flex;
+        }
+        .scroll-down-hint svg {
+            display: block;
+        }
+        @keyframes scrollHintBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(7px); }
         }
         .message {
             padding: 10px 12px;
             line-height: 1.5;
             word-wrap: break-word;
             animation: fadeIn 0.2s ease;
-            white-space: pre-wrap;
             border: var(--line);
         }
+        .message.user { white-space: pre-wrap; }
+        .message.ai { white-space: normal; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .message.user { background: var(--user-msg); align-self: flex-end; max-width: 92%; color: var(--text); }
         .message.ai { background: var(--ai-msg); align-self: flex-start; max-width: 100%; color: var(--text); }
+        .message.ai .md-body { word-wrap: break-word; overflow-wrap: break-word; }
+        .message.ai .md-body p { margin: 0.45em 0; }
+        .message.ai .md-body p:first-child { margin-top: 0; }
+        .message.ai .md-body p:last-child { margin-bottom: 0; }
+        .message.ai .md-body h1, .message.ai .md-body h2, .message.ai .md-body h3 {
+            margin: 0.65em 0 0.35em;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+        .message.ai .md-body h1 { font-size: 1.15rem; }
+        .message.ai .md-body h2 { font-size: 1.05rem; }
+        .message.ai .md-body h3 { font-size: 1rem; }
+        .message.ai .md-body ul, .message.ai .md-body ol { margin: 0.4em 0; padding-left: 1.35em; }
+        .message.ai .md-body li { margin: 0.2em 0; }
+        .message.ai .md-body blockquote {
+            margin: 0.5em 0;
+            padding-left: 10px;
+            border-left: 3px solid var(--border);
+            color: var(--text-muted);
+        }
+        .message.ai .md-body pre {
+            margin: 8px 0;
+            padding: 8px 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: var(--bg);
+            border: var(--line);
+            font-family: 'Iosevka Charon', ui-monospace, monospace;
+            font-size: 0.86rem;
+        }
+        .message.ai .md-body code {
+            font-family: 'Iosevka Charon', ui-monospace, monospace;
+            font-size: 0.88em;
+            background: var(--bg);
+            padding: 1px 5px;
+            border: var(--line);
+        }
+        .message.ai .md-body pre code { background: transparent; border: none; padding: 0; font-size: inherit; }
+        .message.ai .md-body a { color: var(--accent); word-break: break-word; }
+        .message.ai .md-body table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.92em; }
+        .message.ai .md-body th, .message.ai .md-body td {
+            border: var(--line);
+            padding: 4px 8px;
+        }
         .message.system { background: var(--system-msg-bg); align-self: center; font-size: 0.85rem; color: var(--text-muted); max-width: 100%; }
+        /* Pi stream: chronological segments (think → tool → think → answer) */
+        .stream-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+        .stream-timeline-persist { display: flex; flex-direction: column; gap: 12px; margin-bottom: 10px; width: 100%; }
+        .stream-segment-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .stream-segment-thinking .stream-thinking-body {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            white-space: pre-wrap;
+            border-left: 3px solid var(--border);
+            padding-left: 8px;
+        }
+        .stream-segment-reply .stream-main { white-space: pre-wrap; }
+        .stream-thinking {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            white-space: pre-wrap;
+            display: none;
+            border-left: 3px solid var(--border);
+            padding-left: 8px;
+        }
+        .stream-thinking:not(:empty) { display: block; }
+        .stream-thinking.ai-thinking-persist { display: block; }
+        .stream-main { white-space: pre-wrap; }
+        .stream-tools { margin-top: 8px; font-size: 0.82rem; }
+        .stream-tool-block {
+            border: var(--line);
+            background: var(--bg);
+            padding: 8px 10px;
+            margin-top: 0;
+            font-family: 'Iosevka Charon', ui-monospace, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .stream-tool-block .tool-name { font-weight: 600; margin-bottom: 4px; color: var(--text); }
         .composer {
             flex-shrink: 0;
             position: sticky;
@@ -344,7 +476,14 @@
             <div class="model-info" id="model-info"></div>
         </div>
 
-        <div id="message-list" class="message-list"></div>
+        <div class="chat-scroll-wrap">
+            <div id="message-list" class="message-list"></div>
+            <button type="button" id="scroll-down-hint" class="scroll-down-hint" hidden aria-label="Scroll to latest output">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12l7 7 7-7"/>
+                </svg>
+            </button>
+        </div>
 
         <div class="composer">
             <div class="input-area">
@@ -355,6 +494,8 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script>
         const API_BASE = window.location.origin;
 
@@ -362,6 +503,7 @@
         const statusText = document.getElementById('status-text');
         const modelInfo = document.getElementById('model-info');
         const messageList = document.getElementById('message-list');
+        const scrollDownHint = document.getElementById('scroll-down-hint');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const piFolderBar = document.getElementById('pi-folder-bar');
@@ -383,10 +525,116 @@
         /** Mirror of server session (full list including system); refreshed via /api/session and each /api/chat. */
         let conversationHistory = [];
 
+        /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
+        const SCROLL_PIN_PX = 96;
+
+        function isMessageListNearBottom() {
+            const el = messageList;
+            const room = el.scrollHeight - el.scrollTop - el.clientHeight;
+            return room <= SCROLL_PIN_PX;
+        }
+
+        function scrollMessageListToBottom() {
+            messageList.scrollTop = messageList.scrollHeight;
+            updateScrollDownHint();
+        }
+
+        /** During streaming: only scroll if user was already near the bottom. */
+        function maybeFollowStream() {
+            if (isMessageListNearBottom()) {
+                messageList.scrollTop = messageList.scrollHeight;
+            }
+            updateScrollDownHint();
+        }
+
+        function updateScrollDownHint() {
+            if (!scrollDownHint) return;
+            const overflow = messageList.scrollHeight > messageList.clientHeight + 4;
+            const show = busy && overflow && !isMessageListNearBottom();
+            scrollDownHint.hidden = !show;
+        }
+
+        messageList.addEventListener('scroll', function () {
+            updateScrollDownHint();
+        }, { passive: true });
+
+        if (scrollDownHint) {
+            scrollDownHint.addEventListener('click', function () {
+                scrollMessageListToBottom();
+            });
+        }
+
         function escapeHtml(s) {
             const d = document.createElement('div');
             d.textContent = s;
             return d.innerHTML;
+        }
+
+        function renderAssistantMarkdown(text) {
+            const t = typeof text === 'string' ? text : '';
+            if (!t.trim()) return '';
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                const parse = marked.parse || marked;
+                const raw = parse(t, { breaks: true, gfm: true });
+                return DOMPurify.sanitize(raw);
+            }
+            return escapeHtml(t).replace(/\n/g, '<br>');
+        }
+
+        /**
+         * Strip live "Answer" stream from a timeline clone so we do not duplicate final markdown.
+         */
+        function timelinePersistHtml(timelineEl) {
+            if (!timelineEl) return '';
+            const clone = timelineEl.cloneNode(true);
+            clone.querySelectorAll('.stream-segment-reply').forEach(function (n) {
+                n.remove();
+            });
+            return clone.innerHTML.trim();
+        }
+
+        /**
+         * @param {string} content - assistant plain text (markdown)
+         * @param {{ thinkingText?: string, toolsInnerHtml?: string, timelineHtml?: string }} [opts]
+         */
+        function addAssistantMessage(content, opts) {
+            opts = opts || {};
+            const wrap = document.createElement('div');
+            wrap.className = 'message ai';
+            const timelineHtml = String(opts.timelineHtml || '').trim();
+            if (timelineHtml) {
+                const tim = document.createElement('div');
+                tim.className = 'stream-timeline-persist';
+                tim.innerHTML = typeof DOMPurify !== 'undefined'
+                    ? DOMPurify.sanitize(timelineHtml)
+                    : timelineHtml;
+                wrap.appendChild(tim);
+            } else {
+                const think = String(opts.thinkingText || '').trim();
+                if (think) {
+                    const th = document.createElement('div');
+                    th.className = 'stream-thinking ai-thinking-persist';
+                    th.setAttribute('aria-label', 'Thinking');
+                    th.textContent = think;
+                    wrap.appendChild(th);
+                }
+                const toolsHtml = String(opts.toolsInnerHtml || '').trim();
+                if (toolsHtml) {
+                    const tools = document.createElement('div');
+                    tools.className = 'stream-tools msg-tools-persist';
+                    tools.innerHTML = typeof DOMPurify !== 'undefined'
+                        ? DOMPurify.sanitize(toolsHtml, { ADD_ATTR: ['aria-label'] })
+                        : toolsHtml;
+                    wrap.appendChild(tools);
+                }
+            }
+            const body = document.createElement('div');
+            body.className = 'md-body';
+            body.innerHTML = renderAssistantMarkdown(content);
+            wrap.appendChild(body);
+            messageList.appendChild(wrap);
+            scrollMessageListToBottom();
+            return wrap;
         }
 
         function setHelpDrawerOpen(open) {
@@ -450,14 +698,168 @@
             div.className = 'message ' + role;
             div[asHtml ? 'innerHTML' : 'textContent'] = asHtml ? htmlOrText : htmlOrText;
             messageList.appendChild(div);
-            messageList.scrollTop = messageList.scrollHeight;
+            scrollMessageListToBottom();
             return div;
         }
 
-        function renderFromServer(messages) {
+        function createStreamingAiShell() {
+            const wrap = document.createElement('div');
+            wrap.className = 'message ai stream-message';
+            const timeline = document.createElement('div');
+            timeline.className = 'stream-timeline';
+
+            let lastKind = null;
+            let thinkingBody = null;
+            let replyBody = null;
+
+            function updateReplyLabelVisibility() {
+                const hasOther = timeline.querySelector('.stream-segment-thinking, .stream-segment-tool');
+                timeline.querySelectorAll('.stream-segment-reply .stream-segment-label').forEach(function (lab) {
+                    lab.hidden = !hasOther;
+                });
+            }
+
+            function ensureThinkingSegment() {
+                if (lastKind === 'thinking' && thinkingBody) return thinkingBody;
+                const seg = document.createElement('div');
+                seg.className = 'stream-segment stream-segment-thinking';
+                const lab = document.createElement('div');
+                lab.className = 'stream-segment-label';
+                lab.textContent = 'Thinking';
+                const body = document.createElement('div');
+                body.className = 'stream-thinking-body';
+                body.setAttribute('aria-label', 'Thinking');
+                seg.appendChild(lab);
+                seg.appendChild(body);
+                timeline.appendChild(seg);
+                lastKind = 'thinking';
+                thinkingBody = body;
+                replyBody = null;
+                updateReplyLabelVisibility();
+                return body;
+            }
+
+            function ensureReplySegment() {
+                if (lastKind === 'reply' && replyBody) return replyBody;
+                const seg = document.createElement('div');
+                seg.className = 'stream-segment stream-segment-reply';
+                const lab = document.createElement('div');
+                lab.className = 'stream-segment-label';
+                lab.textContent = 'Answer';
+                const body = document.createElement('div');
+                body.className = 'stream-main';
+                seg.appendChild(lab);
+                seg.appendChild(body);
+                timeline.appendChild(seg);
+                lastKind = 'reply';
+                replyBody = body;
+                thinkingBody = null;
+                updateReplyLabelVisibility();
+                return body;
+            }
+
+            function mountToolSegment(toolName, args) {
+                const seg = document.createElement('div');
+                seg.className = 'stream-segment stream-segment-tool';
+                const lab = document.createElement('div');
+                lab.className = 'stream-segment-label';
+                lab.textContent = 'Tool';
+                const block = document.createElement('div');
+                block.className = 'stream-tool-block';
+                const title = document.createElement('div');
+                title.className = 'tool-name';
+                const cmd = args && args.command ? String(args.command) : '';
+                const name = toolName || 'tool';
+                title.textContent = cmd ? (name + ': ' + cmd) : name;
+                const pre = document.createElement('div');
+                pre.className = 'tool-body';
+                block.appendChild(title);
+                block.appendChild(pre);
+                seg.appendChild(lab);
+                seg.appendChild(block);
+                timeline.appendChild(seg);
+                lastKind = 'tool';
+                thinkingBody = null;
+                replyBody = null;
+                updateReplyLabelVisibility();
+                return { seg: seg, block: block, pre: pre };
+            }
+
+            wrap.appendChild(timeline);
+            messageList.appendChild(wrap);
+            scrollMessageListToBottom();
+
+            return {
+                wrap: wrap,
+                timeline: timeline,
+                ensureThinkingSegment: ensureThinkingSegment,
+                ensureReplySegment: ensureReplySegment,
+                mountToolSegment: mountToolSegment,
+                toolBlocks: new Map()
+            };
+        }
+
+        function partialResultToText(pr) {
+            if (!pr || !Array.isArray(pr.content)) return '';
+            let s = '';
+            for (const c of pr.content) {
+                if (c && c.type === 'text' && typeof c.text === 'string') s += c.text;
+            }
+            return s;
+        }
+
+        function resultToText(result) {
+            if (!result || !Array.isArray(result.content)) return '';
+            return partialResultToText(result);
+        }
+
+        async function readNdjsonStream(body, onRecord) {
+            const reader = body.getReader();
+            const dec = new TextDecoder();
+            let buf = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (value) buf += dec.decode(value, { stream: true });
+                if (done) {
+                    buf += dec.decode();
+                    break;
+                }
+                for (;;) {
+                    const nl = buf.indexOf('\n');
+                    if (nl < 0) break;
+                    const line = buf.slice(0, nl).trim();
+                    buf = buf.slice(nl + 1);
+                    if (!line) continue;
+                    try {
+                        onRecord(JSON.parse(line));
+                    } catch (_) {}
+                }
+            }
+            const tail = buf.trim();
+            if (tail) {
+                try {
+                    onRecord(JSON.parse(tail));
+                } catch (_) {}
+            }
+        }
+
+        /**
+         * @param {Array} messages
+         * @param {{ lastAssistantThinking?: string, lastAssistantTools?: string, lastAssistantTimelineHtml?: string }} [streamOpts]
+         *   When set, extras are shown only on the last assistant message (Pi stream not on server).
+         */
+        function renderFromServer(messages, streamOpts) {
+            streamOpts = streamOpts || {};
             messageList.innerHTML = '';
             let shown = false;
-            for (const m of messages) {
+            const assistantIndices = [];
+            for (let i = 0; i < messages.length; i++) {
+                if (messages[i] && messages[i].role === 'assistant') assistantIndices.push(i);
+            }
+            const lastAssistantIdx = assistantIndices.length ? assistantIndices[assistantIndices.length - 1] : -1;
+
+            for (let i = 0; i < messages.length; i++) {
+                const m = messages[i];
                 if (!m || typeof m !== 'object') continue;
                 if (m.role === 'system') continue;
                 const c = m.content;
@@ -466,7 +868,18 @@
                     addMessage('user', c, false);
                     shown = true;
                 } else if (m.role === 'assistant') {
-                    addMessage('ai', c, false);
+                    const isLast = i === lastAssistantIdx;
+                    const timelineH = isLast ? (streamOpts.lastAssistantTimelineHtml || '').trim() : '';
+                    if (timelineH) {
+                        addAssistantMessage(c, { timelineHtml: timelineH });
+                    } else {
+                        const think = isLast ? (streamOpts.lastAssistantThinking || '') : '';
+                        const tools = isLast ? (streamOpts.lastAssistantTools || '') : '';
+                        addAssistantMessage(c, {
+                            thinkingText: think,
+                            toolsInnerHtml: tools
+                        });
+                    }
                     shown = true;
                 }
             }
@@ -475,13 +888,14 @@
             }
         }
 
-        async function loadSession() {
+        /** @param {boolean} [skipRender] If true, only refresh conversationHistory (caller renders). */
+        async function loadSession(skipRender) {
             try {
                 const r = await fetch(API_BASE + '/api/session', { credentials: 'same-origin' });
                 if (!r.ok) return;
                 const data = await r.json();
                 conversationHistory = Array.isArray(data.messages) ? data.messages : [];
-                renderFromServer(conversationHistory);
+                if (!skipRender) renderFromServer(conversationHistory);
             } catch (e) {
                 console.error(e);
             }
@@ -603,9 +1017,9 @@
             setConnected(true, 'Thinking…');
 
             addMessage('user', text, false);
-            const aiEl = addMessage('ai', '…', false);
+            const shell = createStreamingAiShell();
             try {
-                const response = await fetch(API_BASE + '/api/chat', {
+                const response = await fetch(API_BASE + '/api/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -614,14 +1028,14 @@
                         model: selectedModel
                     })
                 });
-                const raw = await response.text();
-                let data = {};
-                try {
-                    data = raw ? JSON.parse(raw) : {};
-                } catch (_) {}
 
                 if (!response.ok) {
-                    aiEl.remove();
+                    const raw = await response.text();
+                    let data = {};
+                    try {
+                        data = raw ? JSON.parse(raw) : {};
+                    } catch (_) {}
+                    shell.wrap.remove();
                     const userMsgs = messageList.querySelectorAll('.message.user');
                     if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
                     await loadSession();
@@ -632,12 +1046,88 @@
                     return;
                 }
 
-                conversationHistory = Array.isArray(data.messages) ? data.messages : conversationHistory;
-                aiEl.remove();
-                renderFromServer(conversationHistory);
+                if (!response.body) {
+                    shell.wrap.remove();
+                    const userMsgs = messageList.querySelectorAll('.message.user');
+                    if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
+                    await loadSession();
+                    addMessage('system', 'No response body', false);
+                    return;
+                }
+
+                let donePayload = null;
+                let streamErr = null;
+                await readNdjsonStream(response.body, function (o) {
+                    if (!o || typeof o !== 'object') return;
+                    if (o.event === 'delta' && o.text) {
+                        const main = shell.ensureReplySegment();
+                        main.textContent += o.text;
+                        maybeFollowStream();
+                    } else if (o.event === 'thinking' && o.text) {
+                        const th = shell.ensureThinkingSegment();
+                        th.textContent += o.text;
+                        maybeFollowStream();
+                    } else if (o.event === 'tool') {
+                        const id = String(o.toolCallId != null ? o.toolCallId : o.toolName || '_');
+                        const phase = o.phase;
+                        const name = o.toolName || 'tool';
+                        if (phase === 'start') {
+                            shell.toolBlocks.set(id, { pending: true, toolName: name, args: o.args });
+                        } else if (phase === 'update') {
+                            let row = shell.toolBlocks.get(id);
+                            if (!row) {
+                                shell.toolBlocks.set(id, { pending: true, toolName: name, args: o.args });
+                                row = shell.toolBlocks.get(id);
+                            }
+                            if (row && row.pending) {
+                                const ui = shell.mountToolSegment(row.toolName || name, row.args || o.args);
+                                shell.toolBlocks.set(id, Object.assign({ pending: false }, ui));
+                                row = shell.toolBlocks.get(id);
+                            }
+                            if (row && row.pre && o.partialResult) {
+                                row.pre.textContent = partialResultToText(o.partialResult);
+                            }
+                            maybeFollowStream();
+                        } else if (phase === 'end') {
+                            let row = shell.toolBlocks.get(id);
+                            if (!row) {
+                                shell.toolBlocks.set(id, { pending: true, toolName: name, args: o.args });
+                                row = shell.toolBlocks.get(id);
+                            }
+                            if (row && row.pending) {
+                                const ui = shell.mountToolSegment(name, o.args);
+                                shell.toolBlocks.set(id, Object.assign({ pending: false }, ui));
+                                row = shell.toolBlocks.get(id);
+                            }
+                            if (row && row.pre) {
+                                const txt = resultToText(o.result);
+                                if (txt) row.pre.textContent = txt;
+                            }
+                            maybeFollowStream();
+                        }
+                    } else if (o.event === 'done') {
+                        donePayload = o;
+                    } else if (o.event === 'error') {
+                        streamErr = typeof o.detail === 'string' ? o.detail : JSON.stringify(o.detail || o);
+                    }
+                });
+
+                if (streamErr) {
+                    throw new Error(streamErr);
+                }
+                const timelineSnap = timelinePersistHtml(shell.timeline);
+                if (!donePayload || !Array.isArray(donePayload.messages)) {
+                    await loadSession(true);
+                } else {
+                    conversationHistory = donePayload.messages;
+                }
+                shell.wrap.remove();
+                renderFromServer(conversationHistory, {
+                    lastAssistantTimelineHtml: timelineSnap
+                });
             } catch (err) {
                 console.error(err);
-                aiEl.remove();
+                shell.wrap.remove();
                 const userMsgs = messageList.querySelectorAll('.message.user');
                 if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
                 await loadSession();
@@ -646,6 +1136,7 @@
                 busy = false;
                 sendBtn.disabled = false;
                 input.disabled = false;
+                updateScrollDownHint();
                 void populateModels();
             }
         }
@@ -691,6 +1182,7 @@
         (async function init() {
             await populateModels();
             await loadSession();
+            updateScrollDownHint();
         })();
     </script>
 </body>
