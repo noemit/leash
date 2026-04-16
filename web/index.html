@@ -7,6 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Datatype:wght@100..900&family=Iosevka+Charon:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Teachers:ital,wght@0,400..800;1,400..800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/assets/leash-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
     <style>
         :root {
             --bg: #ebe4e8;
@@ -50,32 +54,46 @@
         }
         header {
             flex-shrink: 0;
-            padding: 4px 0 10px;
+            padding: 2px 0 0;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: lowercase;
+            color: var(--text);
+        }
+        .brand-icon {
+            width: 16px;
+            height: 16px;
+            display: block;
         }
         h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--text);
-            letter-spacing: 0.02em;
+            display: none;
         }
         .status-bar {
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
-            gap: 6px;
-            padding: 8px 0 10px;
-            font-size: 0.8rem;
+            align-items: stretch;
+            gap: 0;
+            padding: 0;
+            font-size: 0.7rem;
             border-bottom: var(--line);
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
         .status-row {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 6px;
             flex-wrap: nowrap;
             width: 100%;
             justify-content: space-between;
+            min-height: 18px;
+            padding: 2px 0;
         }
         .status-indicator {
             display: inline-flex;
@@ -100,7 +118,7 @@
         }
         .status-dot.online { background: var(--online); border-color: var(--online); }
         .status-dot.offline { background: var(--offline); border-color: var(--offline); }
-        .model-info { font-size: 0.8rem; color: var(--text-muted); width: 100%; }
+        .model-info { font-size: 0.7rem; color: var(--text-muted); width: 100%; padding: 0 0 2px 0; }
         .model-info strong { color: var(--text); font-weight: 600; }
         .status-toolbar {
             display: inline-flex;
@@ -180,6 +198,36 @@
             background: var(--bg);
             padding: 1px 5px;
             border: var(--line);
+        }
+        .settings-drawer {
+            display: none;
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: var(--surface);
+            border: var(--line);
+            font-size: 0.78rem;
+        }
+        .settings-drawer.open { display: block; }
+        .settings-drawer h3 {
+            font-size: 0.88rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+        .settings-drawer .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .settings-drawer .setting-row:first-of-type {
+            margin-top: 0;
+        }
+        .settings-drawer label {
+            flex: 1;
+            color: var(--text-muted);
         }
         .pi-folder-drawer label {
             display: block;
@@ -344,12 +392,24 @@
             color: var(--text-muted);
             margin-bottom: 4px;
         }
+        .stream-segment-thinking {
+            cursor: pointer;
+        }
         .stream-segment-thinking .stream-thinking-body {
             font-size: 0.78rem;
             color: var(--text-muted);
             white-space: pre-wrap;
             border-left: 3px solid var(--border);
             padding-left: 8px;
+            display: none;
+        }
+        .stream-segment-thinking.expanded .stream-thinking-body {
+            display: block;
+        }
+        .stream-segment-thinking .stream-segment-label::after {
+            content: " (tap to expand)";
+            font-weight: 400;
+            letter-spacing: 0;
         }
         .stream-segment-reply .stream-main { white-space: pre-wrap; }
         .stream-thinking {
@@ -386,6 +446,17 @@
             background-color: var(--bg);
             box-shadow: 0 -8px 24px var(--bg);
         }
+        .composer-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .composer-actions-row {
+            display: flex;
+            gap: 6px;
+            align-items: stretch;
+            justify-content: flex-end;
+        }
         .input-area { display: flex; gap: 8px; align-items: flex-end; }
         .input-wrapper {
             flex: 1;
@@ -418,6 +489,19 @@
             font-size: 1rem;
         }
         #send-btn:hover { background: var(--accent-hover); }
+        #stop-btn {
+            padding: 8px 14px;
+            border: var(--line);
+            background: var(--surface);
+            color: var(--offline);
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        #stop-btn:hover:not(:disabled) {
+            background: #fbe5ec;
+        }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .text-muted { color: var(--text-muted); }
         .text-error { color: var(--offline); }
@@ -426,7 +510,10 @@
 <body>
     <div class="app">
         <header>
-            <h1>leash</h1>
+            <div class="brand">
+                <img src="/assets/leash-icon.png" alt="" class="brand-icon" aria-hidden="true">
+                <span class="brand-title">leash</span>
+            </div>
         </header>
 
         <div class="status-bar" id="status-bar">
@@ -443,6 +530,12 @@
                             </svg>
                         </button>
                     </div>
+                    <button type="button" id="settings-toggle" class="toolbar-icon-btn" aria-expanded="false" aria-controls="settings-drawer" title="Settings" aria-label="Settings">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.6 15a1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                    </button>
                     <button type="button" id="clear-chat-btn" class="toolbar-icon-btn" title="Clear conversation (same as /clear)" aria-label="Clear conversation">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -461,6 +554,17 @@
                     <button type="button" id="pi-subpath-btn">Set folder</button>
                 </div>
                 <span class="pi-ws-hint" id="pi-workspace-hint"></span>
+            </div>
+            <div id="settings-drawer" class="settings-drawer" role="region" aria-label="Settings">
+                <h3>Settings</h3>
+                <div class="setting-row">
+                    <label for="continuous-mode-toggle">Continuous mode</label>
+                    <input type="checkbox" id="continuous-mode-toggle" />
+                </div>
+                <p class="text-muted" style="font-size:0.72rem;margin-top:8px;">
+                    When enabled, Leash will automatically say <code>continue. if you cannot continue, respond only with continue_blocked</code>
+                    after each reply, and on <code>continue_blocked</code> will send a follow-up instruction to refocus on your goals and plans.
+                </p>
             </div>
             <div id="slash-help-drawer" class="slash-help-drawer" role="region" aria-label="Slash commands">
                 <h3>Slash commands</h3>
@@ -490,7 +594,12 @@
                 <div class="input-wrapper">
                     <textarea id="user-input" placeholder="Message…  /help for commands" autocomplete="off" aria-label="Message input"></textarea>
                 </div>
-                <button type="button" id="send-btn">Send</button>
+                <div class="composer-actions">
+                    <div class="composer-actions-row">
+                        <button type="button" id="send-btn">Send</button>
+                        <button type="button" id="stop-btn" hidden>Stop</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -506,6 +615,7 @@
         const scrollDownHint = document.getElementById('scroll-down-hint');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
+        const stopBtn = document.getElementById('stop-btn');
         const piFolderBar = document.getElementById('pi-folder-bar');
         const piFolderToggle = document.getElementById('pi-folder-toggle');
         const piFolderDrawer = document.getElementById('pi-folder-drawer');
@@ -516,6 +626,9 @@
         const clearChatBtn = document.getElementById('clear-chat-btn');
         const cmdHelpToggle = document.getElementById('cmd-help-toggle');
         const slashHelpDrawer = document.getElementById('slash-help-drawer');
+        const settingsToggle = document.getElementById('settings-toggle');
+        const settingsDrawer = document.getElementById('settings-drawer');
+        const continuousModeToggle = document.getElementById('continuous-mode-toggle');
 
         let busy = false;
         let clearing = false;
@@ -524,6 +637,10 @@
         let selectedModel = '';
         /** Mirror of server session (full list including system); refreshed via /api/session and each /api/chat. */
         let conversationHistory = [];
+        /** Abort controller for the current streaming request (if any). */
+        let currentStreamAbortController = null;
+        /** Continuous mode setting (UI toggle). */
+        let continuousModeEnabled = false;
 
         /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
         const SCROLL_PIN_PX = 96;
@@ -640,13 +757,28 @@
         function setHelpDrawerOpen(open) {
             cmdHelpToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
             slashHelpDrawer.classList.toggle('open', open);
-            if (open) setPiDrawerOpen(false);
+            if (open) {
+                setPiDrawerOpen(false);
+                setSettingsDrawerOpen(false);
+            }
         }
 
         function setPiDrawerOpen(open) {
             piFolderToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
             piFolderDrawer.classList.toggle('open', open);
-            if (open) setHelpDrawerOpen(false);
+            if (open) {
+                setHelpDrawerOpen(false);
+                setSettingsDrawerOpen(false);
+            }
+        }
+
+        function setSettingsDrawerOpen(open) {
+            settingsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            settingsDrawer.classList.toggle('open', open);
+            if (open) {
+                setHelpDrawerOpen(false);
+                setPiDrawerOpen(false);
+            }
         }
 
         piFolderToggle.addEventListener('click', () => {
@@ -657,6 +789,11 @@
         cmdHelpToggle.addEventListener('click', () => {
             const next = cmdHelpToggle.getAttribute('aria-expanded') !== 'true';
             setHelpDrawerOpen(next);
+        });
+
+        settingsToggle.addEventListener('click', () => {
+            const next = settingsToggle.getAttribute('aria-expanded') !== 'true';
+            setSettingsDrawerOpen(next);
         });
 
         clearChatBtn.addEventListener('click', () => { void clearContext(); });
@@ -732,6 +869,11 @@
                 seg.appendChild(lab);
                 seg.appendChild(body);
                 timeline.appendChild(seg);
+                seg.classList.add('collapsed');
+                seg.addEventListener('click', function (ev) {
+                    if (ev.target.closest('button, a')) return;
+                    seg.classList.toggle('expanded');
+                });
                 lastKind = 'thinking';
                 thinkingBody = body;
                 replyBody = null;
@@ -986,11 +1128,61 @@
             }
         }
 
-        async function sendMessage() {
-            const text = input.value.trim();
+        function getLastAssistantTextFromHistory() {
+            if (!Array.isArray(conversationHistory) || !conversationHistory.length) return '';
+            for (let i = conversationHistory.length - 1; i >= 0; i--) {
+                const m = conversationHistory[i];
+                if (m && m.role === 'assistant' && typeof m.content === 'string') {
+                    return m.content.trim();
+                }
+            }
+            return '';
+        }
+
+        function computeContinuousFollowup() {
+            if (!continuousModeEnabled) return null;
+            const txt = getLastAssistantTextFromHistory();
+            if (!txt) return null;
+            const norm = txt.trim().toLowerCase();
+            if (norm === 'continue_blocked') {
+                return 'go to goals.md and think about how to reach these goals. review your recently updated files in /docs/ and create a new plan in /plans/ and then execute that plan.';
+            }
+            return 'continue. if you cannot continue, respond only with continue_blocked';
+        }
+
+        function applySavedSettings() {
+            try {
+                const raw = localStorage.getItem('leash_settings');
+                if (!raw) return;
+                const s = JSON.parse(raw);
+                if (s && typeof s.continuousModeEnabled === 'boolean') {
+                    continuousModeEnabled = s.continuousModeEnabled;
+                }
+            } catch (_) {}
+            if (continuousModeToggle) {
+                continuousModeToggle.checked = !!continuousModeEnabled;
+            }
+        }
+
+        function persistSettings() {
+            try {
+                const payload = { continuousModeEnabled: !!continuousModeEnabled };
+                localStorage.setItem('leash_settings', JSON.stringify(payload));
+            } catch (_) {}
+        }
+
+        if (continuousModeToggle) {
+            continuousModeToggle.addEventListener('change', () => {
+                continuousModeEnabled = !!continuousModeToggle.checked;
+                persistSettings();
+            });
+        }
+
+        async function sendChat(text, viaAuto) {
+            text = String(text || '').trim();
             if (!text) return;
 
-            if (text.startsWith('/')) {
+            if (!viaAuto && text.startsWith('/')) {
                 const firstLine = text.split('\n').map(function (l) { return l.trim(); }).find(Boolean) || text;
                 const parts = firstLine.trim().split(/\s+/);
                 const cmd = parts[0].toLowerCase();
@@ -1010,15 +1202,20 @@
 
             if (busy || !selectedModel) return;
 
-            input.value = '';
+            if (!viaAuto) {
+                input.value = '';
+            }
             busy = true;
             sendBtn.disabled = true;
-            input.disabled = true;
+            if (stopBtn) stopBtn.hidden = false;
             setConnected(true, 'Thinking…');
 
             addMessage('user', text, false);
             const shell = createStreamingAiShell();
+            let abortHandled = false;
+            let nextAutoPrompt = null;
             try {
+                currentStreamAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
                 const response = await fetch(API_BASE + '/api/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1026,7 +1223,8 @@
                     body: JSON.stringify({
                         content: text,
                         model: selectedModel
-                    })
+                    }),
+                    signal: currentStreamAbortController ? currentStreamAbortController.signal : undefined
                 });
 
                 if (!response.ok) {
@@ -1125,20 +1323,48 @@
                 renderFromServer(conversationHistory, {
                     lastAssistantTimelineHtml: timelineSnap
                 });
+                nextAutoPrompt = computeContinuousFollowup();
             } catch (err) {
                 console.error(err);
-                shell.wrap.remove();
-                const userMsgs = messageList.querySelectorAll('.message.user');
-                if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
-                await loadSession();
-                addMessage('system', err.message || 'Request failed', false);
+                if (err && err.name === 'AbortError') {
+                    abortHandled = true;
+                    const timelineSnap = timelinePersistHtml(shell.timeline);
+                    const replyEl = shell.timeline.querySelector('.stream-segment-reply .stream-main');
+                    const replyText = replyEl ? replyEl.textContent || '' : '';
+                    shell.wrap.remove();
+                    if (replyText.trim()) {
+                        addAssistantMessage(replyText, {
+                            timelineHtml: timelineSnap
+                        });
+                    } else {
+                        updateScrollDownHint();
+                    }
+                } else {
+                    shell.wrap.remove();
+                    const userMsgs = messageList.querySelectorAll('.message.user');
+                    if (userMsgs.length) userMsgs[userMsgs.length - 1].remove();
+                    await loadSession();
+                    addMessage('system', err.message || 'Request failed', false);
+                }
             } finally {
                 busy = false;
                 sendBtn.disabled = false;
-                input.disabled = false;
+                if (stopBtn) stopBtn.hidden = true;
+                currentStreamAbortController = null;
                 updateScrollDownHint();
                 void populateModels();
+                if (!abortHandled && nextAutoPrompt && !viaAuto) {
+                    setTimeout(() => {
+                        void sendChat(nextAutoPrompt, true);
+                    }, 50);
+                }
             }
+        }
+
+        async function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+            await sendChat(text, false);
         }
 
         piSubpathBtn.addEventListener('click', async () => {
@@ -1172,6 +1398,12 @@
         });
 
         sendBtn.addEventListener('click', sendMessage);
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => {
+                if (!busy || !currentStreamAbortController) return;
+                currentStreamAbortController.abort();
+            });
+        }
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1180,6 +1412,7 @@
         });
 
         (async function init() {
+            applySavedSettings();
             await populateModels();
             await loadSession();
             updateScrollDownHint();

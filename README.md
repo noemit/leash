@@ -1,5 +1,7 @@
 # Leash
 
+Technical user's minimal Pi‑based OpenClaw dupe — there's not a lot going on here; it's just to keep your agent running and on a leash.
+
 Mobile-friendly web UI for your local AI stack: **[Ollama](https://ollama.com)** by default, or **[Pi](https://shittycodingagent.ai/)** in RPC mode for tools and disk access. Small **FastAPI** app + static UI, same origin so it works behind **ngrok** / Cloudflare Tunnel.
 
 [MIT License](LICENSE)
@@ -47,6 +49,35 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 | `LEASH_PI_CWD` | `$HOME` | Pi sandbox root (not `server/` unless you set it) |
 
 **Chat:** The UI keeps the transcript **in memory on the server** (lost when Leash restarts). Each turn sends only **`{ "content", "model" }`** over the wire; the server builds the full message list for Ollama on localhost. Clear with the **trash** button, **`/clear`** / **`/reset`**, or **`POST /api/session/reset`**. **`/help`** opens command help.
+
+### Streaming UX
+
+- **Stop button**: While a reply is streaming, a **Stop** button appears next to **Send**. Hitting Stop aborts the stream and keeps whatever has already been generated as the final assistant message, so you can cut off rambly answers.
+- **Thinking collapsed by default**: Pi’s internal “Thinking” stream is shown as a **Thinking (tap to expand)** segment above the answer. It’s collapsed by default so the main chat stays readable; click/tap the segment to toggle the detailed thinking body.
+- **Type while streaming**: The message box stays editable while the model is streaming, so you can draft or edit your next turn in parallel. The **Send** button itself is disabled until the current stream finishes or is stopped.
+
+### Continuous mode
+
+In the status bar, next to the Pi folder icon, there’s a **Settings** gear that opens a small settings drawer.
+
+- **Toggle**: The drawer has a **Continuous mode** checkbox, persisted in `localStorage` so it sticks across reloads on the same browser.
+- **Normal continuous behavior**: When Continuous mode is **enabled**, after each successful assistant turn the app automatically sends:
+
+  > `continue. if you cannot continue, respond only with continue_blocked`
+
+  as a new user message. This lets your agent keep working without you manually spamming “continue”.
+
+- **Blocked behavior**: If the model’s last assistant message is exactly:
+
+  > `continue_blocked`
+
+  then instead of asking to “continue” again, the app automatically sends:
+
+  > `go to goals.md and think about how to reach these goals. review your recently updated files in /docs/ and create a new plan in /plans/ and then execute that plan.`
+
+  as the next user message. This gives your agent a consistent recovery path when it can’t keep going on its current plan.
+
+Automatic continuous follow‑ups are only triggered for successful, non‑aborted turns (if you hit **Stop**, that turn will not auto‑chain).
 
 **Pi:** Model comes only from **`LEASH_PI_COMMAND`** (`--model …`). In the UI, **folder** sets a subpath under `LEASH_PI_CWD` (`GET/POST /api/pi/cwd`). Clearing chat also starts a **new Pi RPC session** when possible.
 
