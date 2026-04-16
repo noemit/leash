@@ -126,8 +126,16 @@
         }
         .status-dot.online { background: var(--online); border-color: var(--online); }
         .status-dot.offline { background: var(--offline); border-color: var(--offline); }
-        .model-info { font-size: 0.7rem; color: var(--text-muted); width: 100%; padding: 0 0 2px 0; }
-        .model-info strong { color: var(--text); font-weight: 600; }
+        .status-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            flex: 0 1 auto;
+        }
+        .status-meta strong { color: var(--text); font-weight: 600; }
         .status-toolbar {
             display: inline-flex;
             align-items: center;
@@ -444,6 +452,10 @@
             word-break: break-word;
         }
         .stream-tool-block .tool-name { font-weight: 600; margin-bottom: 4px; color: var(--text); }
+        .stream-tool-block .tool-body {
+            white-space: pre-wrap;
+            min-height: 1.2em;
+        }
         .stream-segment-tool {
             cursor: pointer;
         }
@@ -545,6 +557,7 @@
                         <span class="status-dot offline" id="connection-dot"></span>
                         <span id="status-text">Connecting…</span>
                     </div>
+                    <div class="status-meta" id="model-info"></div>
                 </div>
                 <div class="status-toolbar">
                     <div id="pi-folder-bar" class="pi-folder-inline" hidden>
@@ -601,7 +614,6 @@
                 </dl>
                 <p class="text-muted" style="font-size:0.72rem;margin-top:10px;">Toolbar: folder (Pi only), trash = clear, <strong>?</strong> = this help.</p>
             </div>
-            <div class="model-info" id="model-info"></div>
         </div>
 
         <div class="chat-scroll-wrap">
@@ -701,17 +713,13 @@
             updateScrollDownHint();
         }, { passive: true });
 
-        // Delegate clicks for thinking segments so both live and persisted timelines can be toggled.
-        messageList.addEventListener('click', function (e) {
-            const seg = e.target.closest && e.target.closest('.stream-segment-thinking');
+        // Delegate expansion toggles so live-streaming and persisted blocks both work on touch + mouse.
+        messageList.addEventListener('pointerup', function (e) {
+            const target = e.target;
+            if (!target || !target.closest) return;
+            if (target.closest('button, a, input, textarea, select')) return;
+            const seg = target.closest('.stream-segment-thinking, .stream-segment-tool');
             if (!seg) return;
-            if (e.target.closest('button, a')) return;
-            seg.classList.toggle('expanded');
-        });
-        messageList.addEventListener('click', function (e) {
-            const seg = e.target.closest && e.target.closest('.stream-segment-tool');
-            if (!seg) return;
-            if (e.target.closest('button, a')) return;
             seg.classList.toggle('expanded');
         });
 
@@ -955,6 +963,15 @@
                 title.textContent = cmd ? (name + ': ' + cmd) : name;
                 const pre = document.createElement('div');
                 pre.className = 'tool-body';
+                if (args && typeof args === 'object') {
+                    try {
+                        pre.textContent = JSON.stringify(args, null, 2);
+                    } catch (_) {
+                        pre.textContent = '(running...)';
+                    }
+                } else {
+                    pre.textContent = '(running...)';
+                }
                 block.appendChild(title);
                 block.appendChild(pre);
                 seg.appendChild(lab);
@@ -982,18 +999,40 @@
             };
         }
 
-        function partialResultToText(pr) {
-            if (!pr || !Array.isArray(pr.content)) return '';
-            let s = '';
-            for (const c of pr.content) {
-                if (c && c.type === 'text' && typeof c.text === 'string') s += c.text;
+        function toolContentArrayToText(content) {
+            if (!Array.isArray(content)) return '';
+            const parts = [];
+            for (const c of content) {
+                if (!c || typeof c !== 'object') continue;
+                if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) {
+                    parts.push(c.text);
+                    continue;
+                }
+                if (typeof c.content === 'string' && c.content.trim()) {
+                    parts.push(c.content);
+                    continue;
+                }
+                if (Array.isArray(c.content)) {
+                    const nested = toolContentArrayToText(c.content);
+                    if (nested.trim()) parts.push(nested);
+                    continue;
+                }
+                try {
+                    const s = JSON.stringify(c, null, 2);
+                    if (s && s !== '{}' && s !== '[]') parts.push(s);
+                } catch (_) {}
             }
-            return s;
+            return parts.join('\n').trim();
+        }
+
+        function partialResultToText(pr) {
+            if (!pr || typeof pr !== 'object') return '';
+            return toolContentArrayToText(pr.content);
         }
 
         function resultToText(result) {
-            if (!result || !Array.isArray(result.content)) return '';
-            return partialResultToText(result);
+            if (!result || typeof result !== 'object') return '';
+            return toolContentArrayToText(result.content);
         }
 
         async function readNdjsonStream(body, onRecord) {
