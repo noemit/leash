@@ -36,6 +36,28 @@ def _windows_npm_shim(head: str) -> Optional[Path]:
     return None
 
 
+def _strip_outer_quotes(token: str) -> str:
+    """Undo CMD-style quoting: ``shlex.split(..., posix=False)`` keeps ``\"...\"`` on each arg."""
+    t = token.strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+        return t[1:-1]
+    return token
+
+
+def split_leash_pi_command(raw: str) -> List[str]:
+    """Split ``LEASH_PI_COMMAND`` for subprocess argv.
+
+    Windows uses ``posix=False`` so backslashes in paths like ``C:\\Users\\...`` survive
+    unquoted ``--append-system-prompt`` values. That mode leaves literal ``\"`` around
+    quoted words; strip one matching outer quote pair so ``--system-prompt \"...\"``
+    reaches Pi correctly.
+    """
+    if sys.platform == "win32":
+        parts = shlex.split(raw, posix=False)
+        return [_strip_outer_quotes(p) for p in parts]
+    return shlex.split(raw)
+
+
 def resolve_pi_argv(argv: List[str]) -> List[str]:
     """Resolve the Pi CLI to a real executable path (Windows: pi.cmd vs pi)."""
     if not argv:
@@ -219,10 +241,7 @@ class PiBridge:
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
         )
-        if sys.platform == "win32":
-            self._argv = shlex.split(raw, posix=False)
-        else:
-            self._argv = shlex.split(raw)
+        self._argv = split_leash_pi_command(raw)
         self._exec_argv = resolve_pi_argv(self._argv)
         self._stderr_task: Optional[asyncio.Task[None]] = None
 
