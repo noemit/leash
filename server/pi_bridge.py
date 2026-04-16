@@ -269,6 +269,33 @@ class PiBridge:
             except asyncio.TimeoutError:
                 proc.kill()
 
+    async def force_kill_process(self) -> None:
+        """Hard-stop the Pi subprocess without taking `_lock`.
+
+        Used when the user hits Stop in the UI: aborting the HTTP stream does not
+        automatically stop Pi RPC work, so we terminate the process to release
+        the bridge promptly.
+        """
+        proc = self._proc
+        if not proc or proc.returncode is not None:
+            return
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=3.0)
+            except Exception:
+                pass
+        self._proc = None
+
     async def set_effective_cwd(self, subpath: Optional[str]) -> str:
         """Move Pi's cwd to a subdirectory of LEASH_PI_CWD; restarts the Pi process."""
         new_path = safe_pi_subdir(Path(self._root_dir), subpath)

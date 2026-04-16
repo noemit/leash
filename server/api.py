@@ -177,6 +177,19 @@ def resolve_model(requested: Optional[str]) -> str:
     return requested if requested else MODEL_NAME
 
 
+def _pi_user_message_with_system(sid: str, user_txt: str) -> str:
+    """Prepend Leash session system prompt for Pi RPC turns (Pi does not use Ollama-style message lists)."""
+    sp = _session_system_prompt(sid).strip()
+    if not sp:
+        return user_txt
+    return (
+        "[LEASH_SYSTEM_PROMPT]\n"
+        + sp
+        + "\n[/LEASH_SYSTEM_PROMPT]\n\n"
+        + user_txt
+    )
+
+
 async def process_message_ollama(model_name: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
     payload = {
         "model": model_name,
@@ -356,6 +369,18 @@ async def pi_new_session():
     return {"ok": True}
 
 
+@app.post("/api/pi/kill")
+async def pi_kill_process():
+    """Hard-stop the Pi subprocess (used by UI Stop during streaming)."""
+    if BACKEND != "pi" or not pi_bridge:
+        raise HTTPException(
+            status_code=400,
+            detail="Pi backend not enabled (set LEASH_BACKEND=pi).",
+        )
+    await pi_bridge.force_kill_process()
+    return {"ok": True}
+
+
 @app.get("/api/session")
 async def get_session(request: Request):
     """Return chat messages for this browser session (sets session cookie)."""
@@ -447,7 +472,9 @@ async def chat(request: Request, body: ChatTurnBody):
         if BACKEND == "pi":
             if not pi_bridge:
                 raise HTTPException(status_code=500, detail="Pi bridge not initialized")
-            text = await pi_bridge.prompt(user_txt, float(CHAT_TIMEOUT))
+            text = await pi_bridge.prompt(
+                _pi_user_message_with_system(sid, user_txt), float(CHAT_TIMEOUT)
+            )
             resp_body: Dict[str, Any] = {
                 "response": text,
                 "model": _pi_model_label(),
@@ -521,7 +548,9 @@ async def chat_stream(request: Request, body: ChatTurnBody):
             if BACKEND == "pi":
                 if not pi_bridge:
                     raise RuntimeError("Pi bridge not initialized")
-                async for ev in pi_bridge.prompt_stream(user_txt, float(CHAT_TIMEOUT)):
+                async for ev in pi_bridge.prompt_stream(
+                    _pi_user_message_with_system(sid, user_txt), float(CHAT_TIMEOUT)
+                ):
                     k = ev.get("kind")
                     if k == "text_delta":
                         yield _ndjson_line(

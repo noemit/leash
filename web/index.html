@@ -257,38 +257,6 @@
             min-height: 92px;
             resize: vertical;
         }
-        .settings-drawer .settings-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .settings-drawer .settings-save-btn {
-            padding: 8px 12px;
-            border: var(--line);
-            background: var(--accent);
-            color: #fff;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            font-size: 0.82rem;
-        }
-        .settings-drawer .settings-save-btn:hover:not(:disabled) {
-            background: var(--accent-hover);
-        }
-        .settings-drawer .settings-reset-btn {
-            padding: 8px 12px;
-            border: var(--line);
-            background: var(--surface);
-            color: var(--text);
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            font-size: 0.82rem;
-        }
-        .settings-drawer .settings-reset-btn:hover:not(:disabled) {
-            background: var(--user-msg);
-        }
         .pi-folder-drawer label {
             display: block;
             color: var(--text-muted);
@@ -648,12 +616,6 @@
                 </div>
                 <label for="continuation-prompt-input" style="margin-top:10px;display:block;">Continuation prompt</label>
                 <textarea id="continuation-prompt-input" placeholder="Prompt sent after each turn in Continuous mode..."></textarea>
-                <label for="system-prompt-input" style="margin-top:10px;display:block;">System prompt</label>
-                <textarea id="system-prompt-input" placeholder="Set the system prompt used for this session..."></textarea>
-                <div class="settings-actions">
-                    <button type="button" id="reset-system-prompt-btn" class="settings-reset-btn">Reset</button>
-                    <button type="button" id="save-system-prompt-btn" class="settings-save-btn">Save prompt</button>
-                </div>
                 <p class="text-muted" style="font-size:0.72rem;margin-top:8px;">
                     When enabled, Leash will automatically say <code>continue. if you cannot continue, respond only with continue_blocked</code>
                     after each reply, and on <code>continue_blocked</code> will send a follow-up instruction to refocus on your goals and plans.
@@ -723,9 +685,6 @@
         const continuousModeToggle = document.getElementById('continuous-mode-toggle');
         const thinkingExpandedToggle = document.getElementById('thinking-expanded-toggle');
         const continuationPromptInput = document.getElementById('continuation-prompt-input');
-        const systemPromptInput = document.getElementById('system-prompt-input');
-        const saveSystemPromptBtn = document.getElementById('save-system-prompt-btn');
-        const resetSystemPromptBtn = document.getElementById('reset-system-prompt-btn');
 
         let busy = false;
         let clearing = false;
@@ -744,8 +703,6 @@
         let customContinuationPrompt = 'continue. if you cannot continue, respond only with continue_blocked';
         /** Small local queue of user messages to send after the current turn finishes. */
         let pendingUserQueue = [];
-        /** Session-scoped system prompt shown in Settings UI. */
-        let sessionSystemPrompt = '';
 
         /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
         const SCROLL_PIN_PX = 96;
@@ -1110,6 +1067,12 @@
             const dec = new TextDecoder();
             let buf = '';
             while (true) {
+                if (currentStreamAbortController && currentStreamAbortController.signal && currentStreamAbortController.signal.aborted) {
+                    try {
+                        await reader.cancel();
+                    } catch (_) {}
+                    throw new DOMException('Aborted', 'AbortError');
+                }
                 const { done, value } = await reader.read();
                 if (value) buf += dec.decode(value, { stream: true });
                 if (done) {
@@ -1187,78 +1150,9 @@
                 if (!r.ok) return;
                 const data = await r.json();
                 conversationHistory = Array.isArray(data.messages) ? data.messages : [];
-                sessionSystemPrompt = typeof data.system_prompt === 'string' ? data.system_prompt : '';
-                if (systemPromptInput && !systemPromptInput.matches(':focus')) {
-                    systemPromptInput.value = sessionSystemPrompt;
-                }
                 if (!skipRender) renderFromServer(conversationHistory);
             } catch (e) {
                 console.error(e);
-            }
-        }
-
-        async function saveSystemPrompt() {
-            if (!systemPromptInput || !saveSystemPromptBtn) return;
-            const prompt = String(systemPromptInput.value || '').trim();
-            if (!prompt) {
-                addMessage('system', 'System prompt cannot be empty.', false);
-                return;
-            }
-            saveSystemPromptBtn.disabled = true;
-            try {
-                const r = await fetch(API_BASE + '/api/session/system-prompt', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ prompt: prompt }),
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok) {
-                    const detail = data.detail != null
-                        ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))
-                        : ('HTTP ' + r.status);
-                    addMessage('system', detail, false);
-                    return;
-                }
-                sessionSystemPrompt = typeof data.system_prompt === 'string' ? data.system_prompt : prompt;
-                if (systemPromptInput) systemPromptInput.value = sessionSystemPrompt;
-                conversationHistory = Array.isArray(data.messages) ? data.messages : conversationHistory;
-                renderFromServer(conversationHistory);
-                addMessage('system', 'System prompt updated for this session.', false);
-            } catch (err) {
-                addMessage('system', err.message || 'Failed to save system prompt', false);
-            } finally {
-                saveSystemPromptBtn.disabled = false;
-            }
-        }
-
-        async function resetSystemPrompt() {
-            if (!resetSystemPromptBtn || !saveSystemPromptBtn || !systemPromptInput) return;
-            resetSystemPromptBtn.disabled = true;
-            saveSystemPromptBtn.disabled = true;
-            try {
-                const r = await fetch(API_BASE + '/api/session/system-prompt/reset', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok) {
-                    const detail = data.detail != null
-                        ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))
-                        : ('HTTP ' + r.status);
-                    addMessage('system', detail, false);
-                    return;
-                }
-                sessionSystemPrompt = typeof data.system_prompt === 'string' ? data.system_prompt : '';
-                systemPromptInput.value = sessionSystemPrompt;
-                conversationHistory = Array.isArray(data.messages) ? data.messages : conversationHistory;
-                renderFromServer(conversationHistory);
-                addMessage('system', 'System prompt reset to default.', false);
-            } catch (err) {
-                addMessage('system', err.message || 'Failed to reset system prompt', false);
-            } finally {
-                resetSystemPromptBtn.disabled = false;
-                saveSystemPromptBtn.disabled = false;
             }
         }
 
@@ -1432,12 +1326,6 @@
                 persistSettings();
             });
         }
-        if (saveSystemPromptBtn) {
-            saveSystemPromptBtn.addEventListener('click', () => { void saveSystemPrompt(); });
-        }
-        if (resetSystemPromptBtn) {
-            resetSystemPromptBtn.addEventListener('click', () => { void resetSystemPrompt(); });
-        }
 
         async function sendChat(text, viaAuto) {
             text = String(text || '').trim();
@@ -1523,6 +1411,9 @@
                 let donePayload = null;
                 let streamErr = null;
                 await readNdjsonStream(response.body, function (o) {
+                    if (currentStreamAbortController && currentStreamAbortController.signal && currentStreamAbortController.signal.aborted) {
+                        return;
+                    }
                     if (!o || typeof o !== 'object') return;
                     if (o.event === 'delta' && o.text) {
                         const main = shell.ensureReplySegment();
@@ -1595,6 +1486,8 @@
                 console.error(err);
                 if (err && err.name === 'AbortError') {
                     abortHandled = true;
+                    nextAutoPrompt = null;
+                    pendingUserQueue = [];
                     const timelineSnap = timelinePersistHtml(shell.timeline);
                     const replyEl = shell.timeline.querySelector('.stream-segment-reply .stream-main');
                     const replyText = replyEl ? replyEl.textContent || '' : '';
@@ -1676,6 +1569,12 @@
             stopBtn.addEventListener('click', () => {
                 if (!busy || !currentStreamAbortController) return;
                 currentStreamAbortController.abort();
+                if (serverBackend === 'pi') {
+                    void fetch(API_BASE + '/api/pi/kill', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                    }).catch(() => {});
+                }
             });
         }
         input.addEventListener('keydown', (e) => {
