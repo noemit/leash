@@ -44,6 +44,29 @@ def _strip_outer_quotes(token: str) -> str:
     return token
 
 
+def _argv_has_flag(argv: List[str], flag: str) -> bool:
+    return flag in argv
+
+
+def merge_pi_system_env_into_argv(argv: List[str]) -> List[str]:
+    """If Pi flags are missing, add ``--system-prompt`` / ``--append-system-prompt`` from env.
+
+    ``LEASH_PI_SYSTEM_PROMPT`` and ``LEASH_PI_APPEND_SYSTEM_PROMPT`` are optional. Values are
+    passed through to the Pi CLI (same semantics as those flags on ``pi``). If the flag
+    already appears in ``LEASH_PI_COMMAND``, the command line wins and the env var is ignored.
+    """
+    out = list(argv)
+    if not _argv_has_flag(out, "--system-prompt"):
+        sp = os.getenv("LEASH_PI_SYSTEM_PROMPT")
+        if sp and str(sp).strip():
+            out.extend(["--system-prompt", str(sp)])
+    if not _argv_has_flag(out, "--append-system-prompt"):
+        ap = os.getenv("LEASH_PI_APPEND_SYSTEM_PROMPT")
+        if ap and str(ap).strip():
+            out.extend(["--append-system-prompt", str(ap)])
+    return out
+
+
 def split_leash_pi_command(raw: str) -> List[str]:
     """Split ``LEASH_PI_COMMAND`` for subprocess argv.
 
@@ -241,7 +264,7 @@ class PiBridge:
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
         )
-        self._argv = split_leash_pi_command(raw)
+        self._argv = merge_pi_system_env_into_argv(split_leash_pi_command(raw))
         self._exec_argv = resolve_pi_argv(self._argv)
         self._stderr_task: Optional[asyncio.Task[None]] = None
 

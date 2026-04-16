@@ -46,6 +46,8 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 | `LEASH_SESSION_MAX_AGE_SEC` | `604800` | `leash_session` cookie max-age |
 | `LEASH_BACKEND` | `ollama` | Set `pi` for Pi |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | Pi launch line (must include `--mode rpc`) |
+| `LEASH_PI_SYSTEM_PROMPT` | _(unset)_ | Optional full system prompt text; appended as `--system-prompt` if that flag is not already in `LEASH_PI_COMMAND` |
+| `LEASH_PI_APPEND_SYSTEM_PROMPT` | _(unset)_ | Optional extra system text or file path; appended as `--append-system-prompt` if not already in the command |
 | `LEASH_PI_CWD` | `$HOME` | Pi sandbox root (not `server/` unless you set it) |
 
 **Chat:** The UI keeps the transcript **in memory on the server** (lost when Leash restarts). Each turn sends only **`{ "content", "model" }`** over the wire; the server builds the full message list for Ollama on localhost. Clear with the **trash** button, **`/clear`** / **`/reset`**, or **`POST /api/session/reset`**. **`/help`** opens command help.
@@ -86,6 +88,9 @@ Automatic continuous follow‑ups are only triggered for successful, non‑abort
 ```bash
 export LEASH_BACKEND=pi
 export LEASH_PI_COMMAND="pi --mode rpc --provider ollama --model qwen3.5:latest"
+# optional: long system text without shell quoting — same as pi's --system-prompt / --append-system-prompt
+# export LEASH_PI_SYSTEM_PROMPT="You are …"
+# export LEASH_PI_APPEND_SYSTEM_PROMPT="$HOME/leash-system-extra.md"
 # optional: export LEASH_PI_CWD="$HOME/your-repo"
 cd server && python3 api.py
 ```
