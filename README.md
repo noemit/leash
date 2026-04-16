@@ -35,6 +35,8 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 
 **Tunnel:** e.g. `ngrok http 8080` on the machine running Leash, then open the HTTPS URL on your phone.
 
+**Windows (PowerShell, Pi, quoting):** see **[docs/windows.md](docs/windows.md)**.
+
 ## Environment
 
 | Variable | Default | Purpose |
@@ -42,7 +44,7 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama base URL |
 | `OLLAMA_MODEL` | `qwen3.5:latest` | Default model (Ollama / UI) |
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | Bind |
-| `CHAT_TIMEOUT_SEC` | `300` | Upstream timeout |
+| `CHAT_TIMEOUT_SEC` | `1200` | Upstream timeout (seconds) |
 | `LEASH_SESSION_MAX_AGE_SEC` | `604800` | `leash_session` cookie max-age |
 | `LEASH_BACKEND` | `ollama` | Set `pi` for Pi |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | Pi launch line (must include `--mode rpc`) |
@@ -95,9 +97,7 @@ export LEASH_PI_COMMAND="pi --mode rpc --provider ollama --model qwen3.5:latest"
 cd server && python3 api.py
 ```
 
-**Windows cmd:** `set LEASH_BACKEND=pi` (not PowerShell’s `$env:`). **PowerShell:** `$env:LEASH_BACKEND = "pi"` etc.
-
-Requires **Node** + `npm install -g @mariozechner/pi-coding-agent`. If Windows can’t find `pi`, set **`LEASH_PI_COMMAND`** to the full path of **`pi.cmd`** under `%AppData%\npm`, or ensure that folder is on PATH.
+Requires **Node** + `npm install -g @mariozechner/pi-coding-agent`. **Windows:** PowerShell examples, `pi.cmd`, `LEASH_PI_SYSTEM_PROMPT`, and quoting notes are in **[docs/windows.md](docs/windows.md)**.
 
 ## Dev
 
@@ -111,7 +111,7 @@ cd server && uvicorn api:app --reload --host 0.0.0.0 --port 8080
 - **Port in use** — `PORT=8081` or free the port.
 - **Ollama unreachable** — Ollama must be listening on **11434**; “address already in use” often means it’s **already** running. Align **`OLLAMA_HOST`** if non-default.
 - **No files / tools** — Use **Pi** mode and set **`LEASH_PI_CWD`**.
-- **Pi `FileNotFoundError` on Windows** — See Pi section above (`pi.cmd` / PATH).
+- **Pi `FileNotFoundError` on Windows** — See **[docs/windows.md](docs/windows.md)** (`pi.cmd` / PATH).
 - **Traceback in `h11_impl.py`** — Scroll up for the real frame in `api.py` / deps. Python **3.14:** reinstall from `requirements.txt` (`uvicorn>=0.38`) or use **Docker** (Python 3.11 image).
 
 Optional sample keys: **`config/tunnel.conf`**.
