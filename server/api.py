@@ -32,6 +32,7 @@ SESSION_MAX_AGE = int(os.getenv("LEASH_SESSION_MAX_AGE_SEC", str(7 * 24 * 3600))
 SYSTEM_PROMPT = "You are a helpful assistant. Answer clearly and concisely."
 # In-memory chat per browser session (cleared on server restart).
 SESSION_MESSAGES: Dict[str, List[Dict[str, Any]]] = {}
+SESSION_SYSTEM_PROMPTS: Dict[str, str] = {}
 
 pi_bridge: Optional[PiBridge] = None
 if BACKEND == "pi":
@@ -100,9 +101,32 @@ def _ndjson_line(obj: Dict[str, Any]) -> bytes:
 def _ensure_session(sid: Optional[str]) -> str:
     if not sid:
         sid = uuid.uuid4().hex
+    if sid not in SESSION_SYSTEM_PROMPTS:
+        SESSION_SYSTEM_PROMPTS[sid] = SYSTEM_PROMPT
     if sid not in SESSION_MESSAGES:
-        SESSION_MESSAGES[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        SESSION_MESSAGES[sid] = [{"role": "system", "content": SESSION_SYSTEM_PROMPTS[sid]}]
     return sid
+
+
+def _session_system_prompt(sid: str) -> str:
+    return SESSION_SYSTEM_PROMPTS.get(sid, SYSTEM_PROMPT)
+
+
+def _apply_system_prompt_to_messages(sid: str) -> None:
+    """Ensure first message is system and synced to session prompt."""
+    prompt = _session_system_prompt(sid)
+    msgs = SESSION_MESSAGES.get(sid)
+    if msgs is None:
+        SESSION_MESSAGES[sid] = [{"role": "system", "content": prompt}]
+        return
+    if not msgs:
+        msgs.append({"role": "system", "content": prompt})
+        return
+    first = msgs[0]
+    if isinstance(first, dict) and first.get("role") == "system":
+        first["content"] = prompt
+    else:
+        msgs.insert(0, {"role": "system", "content": prompt})
 
 
 class ChatTurnBody(BaseModel):
@@ -116,6 +140,10 @@ class PiCwdBody(BaseModel):
     """Relative path under LEASH_PI_CWD (empty string = use root)."""
 
     subpath: str = ""
+
+
+class SessionSystemPromptBody(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=20000)
 
 
 async def get_available_models() -> List[str]:
@@ -333,7 +361,13 @@ async def get_session(request: Request):
     """Return chat messages for this browser session (sets session cookie)."""
     raw_sid = request.cookies.get(SESSION_COOKIE)
     sid = _ensure_session(raw_sid)
-    resp = JSONResponse({"messages": copy.deepcopy(SESSION_MESSAGES[sid])})
+    _apply_system_prompt_to_messages(sid)
+    resp = JSONResponse(
+        {
+            "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+            "system_prompt": _session_system_prompt(sid),
+        }
+    )
     _set_session_cookie(resp, sid)
     return resp
 
@@ -343,7 +377,7 @@ async def reset_session(request: Request):
     """Clear in-memory transcript for this session; Pi mode also starts a new Pi RPC session (best effort)."""
     raw_sid = request.cookies.get(SESSION_COOKIE)
     sid = _ensure_session(raw_sid)
-    SESSION_MESSAGES[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    SESSION_MESSAGES[sid] = [{"role": "system", "content": _session_system_prompt(sid)}]
     pi_session_note: Optional[str] = None
     if BACKEND == "pi" and pi_bridge:
         try:
@@ -357,6 +391,43 @@ async def reset_session(request: Request):
     if pi_session_note:
         body["pi_new_session_warning"] = pi_session_note
     resp = JSONResponse(body)
+    _set_session_cookie(resp, sid)
+    return resp
+
+
+@app.post("/api/session/system-prompt")
+async def set_session_system_prompt(request: Request, body: SessionSystemPromptBody):
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    prompt = str(body.prompt).strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="System prompt cannot be empty")
+    SESSION_SYSTEM_PROMPTS[sid] = prompt
+    _apply_system_prompt_to_messages(sid)
+    resp = JSONResponse(
+        {
+            "ok": True,
+            "system_prompt": prompt,
+            "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+        }
+    )
+    _set_session_cookie(resp, sid)
+    return resp
+
+
+@app.post("/api/session/system-prompt/reset")
+async def reset_session_system_prompt(request: Request):
+    raw_sid = request.cookies.get(SESSION_COOKIE)
+    sid = _ensure_session(raw_sid)
+    SESSION_SYSTEM_PROMPTS[sid] = SYSTEM_PROMPT
+    _apply_system_prompt_to_messages(sid)
+    resp = JSONResponse(
+        {
+            "ok": True,
+            "system_prompt": SYSTEM_PROMPT,
+            "messages": copy.deepcopy(SESSION_MESSAGES[sid]),
+        }
+    )
     _set_session_cookie(resp, sid)
     return resp
 
@@ -477,11 +548,13 @@ async def chat_stream(request: Request, body: ChatTurnBody):
                             out["isError"] = ev["isError"]
                         yield _ndjson_line(out)
                     elif k == "turn_done":
+                        session_prompt = _session_system_prompt(sid)
                         mapped = map_pi_messages_to_leash(
-                            ev.get("pi_messages"), SYSTEM_PROMPT
+                            ev.get("pi_messages"), session_prompt
                         )
                         if mapped:
                             SESSION_MESSAGES[sid] = mapped
+                            _apply_system_prompt_to_messages(sid)
                         else:
                             SESSION_MESSAGES[sid].append(
                                 {
