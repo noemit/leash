@@ -104,7 +104,11 @@ def _ensure_session(sid: Optional[str]) -> str:
     if sid not in SESSION_SYSTEM_PROMPTS:
         SESSION_SYSTEM_PROMPTS[sid] = SYSTEM_PROMPT
     if sid not in SESSION_MESSAGES:
-        SESSION_MESSAGES[sid] = [{"role": "system", "content": SESSION_SYSTEM_PROMPTS[sid]}]
+        # Pi uses `LEASH_PI_COMMAND` (--system-prompt, etc.); do not seed a Leash-only system row.
+        if BACKEND == "pi":
+            SESSION_MESSAGES[sid] = []
+        else:
+            SESSION_MESSAGES[sid] = [{"role": "system", "content": SESSION_SYSTEM_PROMPTS[sid]}]
     return sid
 
 
@@ -113,7 +117,9 @@ def _session_system_prompt(sid: str) -> str:
 
 
 def _apply_system_prompt_to_messages(sid: str) -> None:
-    """Ensure first message is system and synced to session prompt."""
+    """Ensure first message is system and synced to session prompt (Ollama only)."""
+    if BACKEND == "pi":
+        return
     prompt = _session_system_prompt(sid)
     msgs = SESSION_MESSAGES.get(sid)
     if msgs is None:
@@ -175,19 +181,6 @@ async def ollama_tags_reachable() -> bool:
 
 def resolve_model(requested: Optional[str]) -> str:
     return requested if requested else MODEL_NAME
-
-
-def _pi_user_message_with_system(sid: str, user_txt: str) -> str:
-    """Prepend Leash session system prompt for Pi RPC turns (Pi does not use Ollama-style message lists)."""
-    sp = _session_system_prompt(sid).strip()
-    if not sp:
-        return user_txt
-    return (
-        "[LEASH_SYSTEM_PROMPT]\n"
-        + sp
-        + "\n[/LEASH_SYSTEM_PROMPT]\n\n"
-        + user_txt
-    )
 
 
 async def process_message_ollama(model_name: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -402,7 +395,10 @@ async def reset_session(request: Request):
     """Clear in-memory transcript for this session; Pi mode also starts a new Pi RPC session (best effort)."""
     raw_sid = request.cookies.get(SESSION_COOKIE)
     sid = _ensure_session(raw_sid)
-    SESSION_MESSAGES[sid] = [{"role": "system", "content": _session_system_prompt(sid)}]
+    if BACKEND == "pi":
+        SESSION_MESSAGES[sid] = []
+    else:
+        SESSION_MESSAGES[sid] = [{"role": "system", "content": _session_system_prompt(sid)}]
     pi_session_note: Optional[str] = None
     if BACKEND == "pi" and pi_bridge:
         try:
@@ -472,9 +468,7 @@ async def chat(request: Request, body: ChatTurnBody):
         if BACKEND == "pi":
             if not pi_bridge:
                 raise HTTPException(status_code=500, detail="Pi bridge not initialized")
-            text = await pi_bridge.prompt(
-                _pi_user_message_with_system(sid, user_txt), float(CHAT_TIMEOUT)
-            )
+            text = await pi_bridge.prompt(user_txt, float(CHAT_TIMEOUT))
             resp_body: Dict[str, Any] = {
                 "response": text,
                 "model": _pi_model_label(),
@@ -548,9 +542,7 @@ async def chat_stream(request: Request, body: ChatTurnBody):
             if BACKEND == "pi":
                 if not pi_bridge:
                     raise RuntimeError("Pi bridge not initialized")
-                async for ev in pi_bridge.prompt_stream(
-                    _pi_user_message_with_system(sid, user_txt), float(CHAT_TIMEOUT)
-                ):
+                async for ev in pi_bridge.prompt_stream(user_txt, float(CHAT_TIMEOUT)):
                     k = ev.get("kind")
                     if k == "text_delta":
                         yield _ndjson_line(
@@ -577,13 +569,9 @@ async def chat_stream(request: Request, body: ChatTurnBody):
                             out["isError"] = ev["isError"]
                         yield _ndjson_line(out)
                     elif k == "turn_done":
-                        session_prompt = _session_system_prompt(sid)
-                        mapped = map_pi_messages_to_leash(
-                            ev.get("pi_messages"), session_prompt
-                        )
+                        mapped = map_pi_messages_to_leash(ev.get("pi_messages"), "")
                         if mapped:
                             SESSION_MESSAGES[sid] = mapped
-                            _apply_system_prompt_to_messages(sid)
                         else:
                             SESSION_MESSAGES[sid].append(
                                 {

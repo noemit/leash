@@ -159,7 +159,12 @@ def flatten_agent_message_content(content: Any) -> str:
 def map_pi_messages_to_leash(
     pi_messages: Optional[List[Any]], system_prompt: str
 ) -> Optional[List[Dict[str, Any]]]:
-    """Map Pi get_messages payload to Leash {role, content} list; prepend system if missing."""
+    """Map Pi get_messages payload to Leash {role, content} list.
+
+    If ``system_prompt`` is non-empty and the transcript has no leading system
+    message, insert one (Ollama-style callers). For Pi, pass ``""`` so Pi's own
+    transcript (including any system row Pi exposes) is preserved.
+    """
     if not pi_messages or not isinstance(pi_messages, list):
         return None
     out: List[Dict[str, Any]] = []
@@ -173,8 +178,9 @@ def map_pi_messages_to_leash(
         out.append({"role": str(role), "content": text})
     if not out:
         return None
-    if out[0].get("role") != "system":
-        out.insert(0, {"role": "system", "content": system_prompt})
+    sp = (system_prompt or "").strip()
+    if sp and out[0].get("role") != "system":
+        out.insert(0, {"role": "system", "content": sp})
     return out
 
 
