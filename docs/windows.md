@@ -14,11 +14,16 @@ Leash reads variables from the **process that starts Python** (your terminal, VS
 
 **After changing any Pi-related variable, restart the Leash server.** `LEASH_PI_COMMAND` and the extra prompt env vars are applied when the Pi subprocess is configured at startup.
 
-To confirm what Leash will run, check the server log line:
+To confirm what Leash will run, check the server log lines:
 
-`[API] Pi command: …`
+- **`[pi-bridge] …`** — printed when the Pi bridge starts. It shows whether `LEASH_PI_SYSTEM_PROMPT` / `LEASH_PI_APPEND_SYSTEM_PROMPT` were **seen by the Python process** (`set` vs `unset`, character count, and `used_by_merge=true` only if the value is non-empty after strip). It also shows whether `--system-prompt` / `--append-system-prompt` ended up in the argv passed to Pi.
+- **`[API] Pi command: …`** — the full merged argv (on Windows, long prompt **bodies** may appear as paths to temp `*.prompt.txt` files; Leash writes the text there so the Windows command line does not truncate or mangle it).
 
-It prints the resolved argv (including `--system-prompt` / `--append-system-prompt` if present).
+If `[pi-bridge]` says `LEASH_PI_SYSTEM_PROMPT unset`, the server process never received that variable (wrong terminal, IDE launch profile without env, or server not restarted after `setx`).
+
+If it says `set` but `used_by_merge=false`, the value is empty or whitespace-only.
+
+If `used_by_merge=true` but `--system-prompt in argv: False`, your `LEASH_PI_COMMAND` already contains `--system-prompt`, so the env var is skipped by design.
 
 ## Pi mode in PowerShell
 

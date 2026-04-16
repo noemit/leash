@@ -11,6 +11,7 @@ import os
 import shlex
 import shutil
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -46,6 +47,49 @@ def _strip_outer_quotes(token: str) -> str:
 
 def _argv_has_flag(argv: List[str], flag: str) -> bool:
     return flag in argv
+
+
+def _spill_prompt_flags_for_windows_argv(argv: List[str]) -> tuple[List[str], List[str]]:
+    """On Windows, ``asyncio.create_subprocess_exec`` turns argv into one command line via
+    ``subprocess.list2cmdline``. Long or multiline ``--system-prompt`` / ``--append-system-prompt``
+    values are often mangled or dropped before they reach Node/Pi. If the value is not an
+    existing file path, write it to a UTF-8 temp file and pass that path instead (Pi treats an
+    existing path as file input, same as its CLI).
+    """
+    if sys.platform != "win32":
+        return list(argv), []
+    spilled: List[str] = []
+    out: List[str] = []
+    i = 0
+    n = len(argv)
+    while i < n:
+        if (
+            i < n - 1
+            and argv[i] in ("--system-prompt", "--append-system-prompt")
+        ):
+            flag, val = argv[i], argv[i + 1]
+            out.append(flag)
+            try:
+                if os.path.isfile(val):
+                    out.append(val)
+                else:
+                    fd, path = tempfile.mkstemp(prefix="leash-pi-", suffix=".prompt.txt")
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        f.write(val)
+                    spilled.append(path)
+                    out.append(path)
+            except BaseException:
+                for p in spilled:
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
+                raise
+            i += 2
+            continue
+        out.append(argv[i])
+        i += 1
+    return out, spilled
 
 
 def merge_pi_system_env_into_argv(argv: List[str]) -> List[str]:
@@ -264,9 +308,45 @@ class PiBridge:
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
         )
-        self._argv = merge_pi_system_env_into_argv(split_leash_pi_command(raw))
+        merged = merge_pi_system_env_into_argv(split_leash_pi_command(raw))
+        self._argv, self._spilled_prompt_paths = _spill_prompt_flags_for_windows_argv(merged)
         self._exec_argv = resolve_pi_argv(self._argv)
         self._stderr_task: Optional[asyncio.Task[None]] = None
+        self._log_pi_argv_bootstrap()
+
+    def _log_pi_argv_bootstrap(self) -> None:
+        sp = os.getenv("LEASH_PI_SYSTEM_PROMPT")
+        ap = os.getenv("LEASH_PI_APPEND_SYSTEM_PROMPT")
+        parts = []
+        if sp is None:
+            parts.append("LEASH_PI_SYSTEM_PROMPT unset")
+        else:
+            parts.append(
+                f"LEASH_PI_SYSTEM_PROMPT set ({len(sp)} chars, used_by_merge={bool(str(sp).strip())})"
+            )
+        if ap is None:
+            parts.append("LEASH_PI_APPEND_SYSTEM_PROMPT unset")
+        else:
+            parts.append(
+                f"LEASH_PI_APPEND_SYSTEM_PROMPT set ({len(ap)} chars, used_by_merge={bool(str(ap).strip())})"
+            )
+        parts.append(f"--system-prompt in argv: {_argv_has_flag(self._argv, '--system-prompt')}")
+        parts.append(
+            f"--append-system-prompt in argv: {_argv_has_flag(self._argv, '--append-system-prompt')}"
+        )
+        if self._spilled_prompt_paths:
+            parts.append(
+                f"Windows prompt spill: {len(self._spilled_prompt_paths)} temp file(s)"
+            )
+        print("[pi-bridge] " + " | ".join(parts))
+
+    def _cleanup_spilled_prompt_paths(self) -> None:
+        for p in self._spilled_prompt_paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+        self._spilled_prompt_paths = []
 
     @property
     def argv(self) -> List[str]:
@@ -552,6 +632,7 @@ class PiBridge:
     async def shutdown(self) -> None:
         # Do not take _lock: a long prompt would block app shutdown forever.
         await self._stop_proc()
+        self._cleanup_spilled_prompt_paths()
 
 
 def last_user_text(messages: List[Dict[str, Any]]) -> Optional[str]:
