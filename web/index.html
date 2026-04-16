@@ -35,7 +35,7 @@
             font-family: 'Datatype', 'Teachers', 'Roboto', 'Iosevka Charon', ui-monospace, monospace;
             background: var(--bg);
             color: var(--text);
-            line-height: 1.55;
+            line-height: 1.35;
             display: flex;
             flex-direction: column;
             min-height: 100dvh;
@@ -47,10 +47,10 @@
             flex-direction: column;
             min-height: 0;
             width: 100%;
-            max-width: 800px;
+            max-width: none;
             margin: 0 auto;
-            padding: 10px 12px;
-            padding-bottom: max(10px, env(safe-area-inset-bottom, 0));
+            padding: 8px 10px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom, 0));
         }
         header {
             flex-shrink: 0;
@@ -327,8 +327,8 @@
             50% { transform: translateY(7px); }
         }
         .message {
-            padding: 10px 12px;
-            line-height: 1.5;
+            padding: 8px 10px;
+            line-height: 1.3;
             word-wrap: break-word;
             animation: fadeIn 0.2s ease;
             border: var(--line);
@@ -339,35 +339,35 @@
         .message.user { background: var(--user-msg); align-self: flex-end; max-width: 92%; color: var(--text); }
         .message.ai { background: var(--ai-msg); align-self: flex-start; max-width: 100%; color: var(--text); }
         .message.ai .md-body { word-wrap: break-word; overflow-wrap: break-word; }
-        .message.ai .md-body p { margin: 0.45em 0; }
+        .message.ai .md-body p { margin: 0.3em 0; }
         .message.ai .md-body p:first-child { margin-top: 0; }
         .message.ai .md-body p:last-child { margin-bottom: 0; }
         .message.ai .md-body h1, .message.ai .md-body h2, .message.ai .md-body h3 {
-            margin: 0.65em 0 0.35em;
+            margin: 0.45em 0 0.25em;
             font-weight: 700;
-            line-height: 1.25;
+            line-height: 1.15;
         }
         .message.ai .md-body h1 { font-size: 1.15rem; }
         .message.ai .md-body h2 { font-size: 1.05rem; }
         .message.ai .md-body h3 { font-size: 1rem; }
-        .message.ai .md-body ul, .message.ai .md-body ol { margin: 0.4em 0; padding-left: 1.35em; }
-        .message.ai .md-body li { margin: 0.2em 0; }
+        .message.ai .md-body ul, .message.ai .md-body ol { margin: 0.25em 0; padding-left: 1.2em; }
+        .message.ai .md-body li { margin: 0.1em 0; }
         .message.ai .md-body blockquote {
-            margin: 0.5em 0;
-            padding-left: 10px;
+            margin: 0.3em 0;
+            padding-left: 8px;
             border-left: 3px solid var(--border);
             color: var(--text-muted);
         }
         .message.ai .md-body pre {
-            margin: 8px 0;
-            padding: 8px 10px;
+            margin: 6px 0;
+            padding: 6px 8px;
             overflow-x: auto;
             white-space: pre-wrap;
             word-break: break-word;
             background: var(--bg);
             border: var(--line);
             font-family: 'Iosevka Charon', ui-monospace, monospace;
-            font-size: 0.86rem;
+            font-size: 0.82rem;
         }
         .message.ai .md-body code {
             font-family: 'Iosevka Charon', ui-monospace, monospace;
@@ -388,10 +388,10 @@
         .stream-timeline {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             width: 100%;
         }
-        .stream-timeline-persist { display: flex; flex-direction: column; gap: 12px; margin-bottom: 10px; width: 100%; }
+        .stream-timeline-persist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; width: 100%; }
         .stream-segment-label {
             font-size: 0.68rem;
             font-weight: 700;
@@ -408,7 +408,7 @@
             color: var(--text-muted);
             white-space: pre-wrap;
             border-left: 3px solid var(--border);
-            padding-left: 8px;
+            padding-left: 6px;
             display: none;
         }
         .stream-segment-thinking.expanded .stream-thinking-body {
@@ -423,11 +423,11 @@
         .stream-thinking {
             font-size: 0.78rem;
             color: var(--text-muted);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             white-space: pre-wrap;
             display: none;
             border-left: 3px solid var(--border);
-            padding-left: 8px;
+            padding-left: 6px;
         }
         .stream-thinking:not(:empty) { display: block; }
         .stream-thinking.ai-thinking-persist { display: block; }
@@ -436,20 +436,34 @@
         .stream-tool-block {
             border: var(--line);
             background: var(--bg);
-            padding: 8px 10px;
+            padding: 6px 8px;
             margin-top: 0;
             font-family: 'Iosevka Charon', ui-monospace, monospace;
             white-space: pre-wrap;
             word-break: break-word;
         }
         .stream-tool-block .tool-name { font-weight: 600; margin-bottom: 4px; color: var(--text); }
+        .stream-segment-tool {
+            cursor: pointer;
+        }
+        .stream-segment-tool .stream-tool-block {
+            display: none;
+        }
+        .stream-segment-tool.expanded .stream-tool-block {
+            display: block;
+        }
+        .stream-segment-tool .stream-segment-label::after {
+            content: " (tap to expand)";
+            font-weight: 400;
+            letter-spacing: 0;
+        }
         .composer {
             flex-shrink: 0;
             position: sticky;
             bottom: 0;
             z-index: 2;
-            padding-top: 10px;
-            margin-top: 4px;
+            padding-top: 8px;
+            margin-top: 2px;
             background: linear-gradient(to bottom, transparent 0%, var(--bg) 12px);
             background-color: var(--bg);
             box-shadow: 0 -8px 24px var(--bg);
@@ -650,6 +664,8 @@
         let currentStreamAbortController = null;
         /** Continuous mode setting (UI toggle). */
         let continuousModeEnabled = false;
+        /** Small local queue of user messages to send after the current turn finishes. */
+        let pendingUserQueue = [];
 
         /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
         const SCROLL_PIN_PX = 96;
@@ -687,6 +703,12 @@
         // Delegate clicks for thinking segments so both live and persisted timelines can be toggled.
         messageList.addEventListener('click', function (e) {
             const seg = e.target.closest && e.target.closest('.stream-segment-thinking');
+            if (!seg) return;
+            if (e.target.closest('button, a')) return;
+            seg.classList.toggle('expanded');
+        });
+        messageList.addEventListener('click', function (e) {
+            const seg = e.target.closest && e.target.closest('.stream-segment-tool');
             if (!seg) return;
             if (e.target.closest('button, a')) return;
             seg.classList.toggle('expanded');
@@ -937,6 +959,7 @@
                 seg.appendChild(lab);
                 seg.appendChild(block);
                 timeline.appendChild(seg);
+                seg.classList.add('collapsed');
                 lastKind = 'tool';
                 thinkingBody = null;
                 replyBody = null;
@@ -1204,6 +1227,12 @@
             text = String(text || '').trim();
             if (!text) return;
 
+            // For manual sends, if a turn is already in flight, queue the message locally.
+            if (!viaAuto && busy) {
+                pendingUserQueue.push(text);
+                return;
+            }
+
             if (!viaAuto && text.startsWith('/')) {
                 const firstLine = text.split('\n').map(function (l) { return l.trim(); }).find(Boolean) || text;
                 const parts = firstLine.trim().split(/\s+/);
@@ -1375,10 +1404,17 @@
                 currentStreamAbortController = null;
                 updateScrollDownHint();
                 void populateModels();
-                if (!abortHandled && nextAutoPrompt && !viaAuto) {
-                    setTimeout(() => {
-                        void sendChat(nextAutoPrompt, true);
-                    }, 50);
+                if (!abortHandled && !viaAuto) {
+                    // Human-typed messages take priority over automatic continuous followups.
+                    const nextUser = pendingUserQueue.shift();
+                    if (nextUser) {
+                        setTimeout(() => { void sendChat(nextUser, false); }, 40);
+                    } else if (nextAutoPrompt) {
+                        setTimeout(() => { void sendChat(nextAutoPrompt, true); }, 50);
+                    }
+                } else if (!abortHandled && viaAuto && nextAutoPrompt) {
+                    // When a turn was auto-started (continuous mode), we may still want to chain again.
+                    setTimeout(() => { void sendChat(nextAutoPrompt, true); }, 50);
                 }
             }
         }
