@@ -21,7 +21,7 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:latest"))
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
-CHAT_TIMEOUT = int(os.getenv("CHAT_TIMEOUT_SEC", "300"))
+CHAT_TIMEOUT = int(os.getenv("CHAT_TIMEOUT_SEC", "1200"))
 BACKEND = os.getenv("LEASH_BACKEND", "ollama").strip().lower()
 
 BASE_DIR = Path(__file__).resolve().parent.parent

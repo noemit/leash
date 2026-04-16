@@ -598,6 +598,10 @@
                     <label for="continuous-mode-toggle">Continuous mode</label>
                     <input type="checkbox" id="continuous-mode-toggle" />
                 </div>
+                <div class="setting-row">
+                    <label for="thinking-expanded-toggle">Show thinking panels by default</label>
+                    <input type="checkbox" id="thinking-expanded-toggle" />
+                </div>
                 <p class="text-muted" style="font-size:0.72rem;margin-top:8px;">
                     When enabled, Leash will automatically say <code>continue. if you cannot continue, respond only with continue_blocked</code>
                     after each reply, and on <code>continue_blocked</code> will send a follow-up instruction to refocus on your goals and plans.
@@ -665,6 +669,7 @@
         const settingsToggle = document.getElementById('settings-toggle');
         const settingsDrawer = document.getElementById('settings-drawer');
         const continuousModeToggle = document.getElementById('continuous-mode-toggle');
+        const thinkingExpandedToggle = document.getElementById('thinking-expanded-toggle');
 
         let busy = false;
         let clearing = false;
@@ -677,6 +682,8 @@
         let currentStreamAbortController = null;
         /** Continuous mode setting (UI toggle). */
         let continuousModeEnabled = false;
+        /** Whether thinking panels should show expanded by default. */
+        let thinkingExpandedByDefault = false;
         /** Small local queue of user messages to send after the current turn finishes. */
         let pendingUserQueue = [];
 
@@ -918,6 +925,9 @@
                 seg.appendChild(body);
                 timeline.appendChild(seg);
                 seg.classList.add('collapsed');
+                if (thinkingExpandedByDefault) {
+                    seg.classList.add('expanded');
+                }
                 seg.addEventListener('click', function (ev) {
                     if (ev.target.closest('button, a')) return;
                     seg.classList.toggle('expanded');
@@ -1243,15 +1253,24 @@
                 if (s && typeof s.continuousModeEnabled === 'boolean') {
                     continuousModeEnabled = s.continuousModeEnabled;
                 }
+                if (s && typeof s.thinkingExpandedByDefault === 'boolean') {
+                    thinkingExpandedByDefault = s.thinkingExpandedByDefault;
+                }
             } catch (_) {}
             if (continuousModeToggle) {
                 continuousModeToggle.checked = !!continuousModeEnabled;
+            }
+            if (thinkingExpandedToggle) {
+                thinkingExpandedToggle.checked = !!thinkingExpandedByDefault;
             }
         }
 
         function persistSettings() {
             try {
-                const payload = { continuousModeEnabled: !!continuousModeEnabled };
+                const payload = {
+                    continuousModeEnabled: !!continuousModeEnabled,
+                    thinkingExpandedByDefault: !!thinkingExpandedByDefault,
+                };
                 localStorage.setItem('leash_settings', JSON.stringify(payload));
             } catch (_) {}
         }
@@ -1259,6 +1278,12 @@
         if (continuousModeToggle) {
             continuousModeToggle.addEventListener('change', () => {
                 continuousModeEnabled = !!continuousModeToggle.checked;
+                persistSettings();
+            });
+        }
+        if (thinkingExpandedToggle) {
+            thinkingExpandedToggle.addEventListener('change', () => {
+                thinkingExpandedByDefault = !!thinkingExpandedToggle.checked;
                 persistSettings();
             });
         }
