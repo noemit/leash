@@ -6,10 +6,11 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/make_favicons.sh path/to/source.png
-# or rely on the default path where Cursor dropped the icon for you.
+# or rely on the default path at the repo root: "iOS Icon Heading.png".
 
-SRC="${1:-/Users/noemititarenco/.cursor/projects/Users-noemititarenco-phone-harness/assets/iOS_Icon_Heading-53292260-518a-41d7-be5f-5ccbc6f10b8d.png}"
-WEB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/web"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="${1:-${ROOT_DIR}/iOS Icon Heading.png}"
+WEB_DIR="${ROOT_DIR}/web"
 ASSETS_DIR="${WEB_DIR}/assets"
 
 mkdir -p "${ASSETS_DIR}"

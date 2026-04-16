@@ -54,25 +54,26 @@
         }
         header {
             flex-shrink: 0;
-            padding: 2px 0 0;
+            padding: 0;
+            margin: 0;
+            height: 0;
+            overflow: hidden;
         }
         .brand {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.9rem;
+            gap: 4px;
+            font-size: 0.8rem;
             font-weight: 600;
             letter-spacing: 0.04em;
             text-transform: lowercase;
             color: var(--text);
+            white-space: nowrap;
         }
         .brand-icon {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             display: block;
-        }
-        h1 {
-            display: none;
         }
         .status-bar {
             flex-shrink: 0;
@@ -94,6 +95,13 @@
             justify-content: space-between;
             min-height: 18px;
             padding: 2px 0;
+        }
+        .status-left {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            flex: 1;
         }
         .status-indicator {
             display: inline-flex;
@@ -509,18 +517,19 @@
 </head>
 <body>
     <div class="app">
-        <header>
-            <div class="brand">
-                <img src="/assets/leash-icon.png" alt="" class="brand-icon" aria-hidden="true">
-                <span class="brand-title">leash</span>
-            </div>
-        </header>
+        <header></header>
 
         <div class="status-bar" id="status-bar">
             <div class="status-row">
-                <div class="status-indicator">
-                    <span class="status-dot offline" id="connection-dot"></span>
-                    <span id="status-text">Connecting…</span>
+                <div class="status-left">
+                    <div class="brand">
+                        <img src="/assets/leash-icon.png" alt="" class="brand-icon" aria-hidden="true">
+                        <span class="brand-title">leash</span>
+                    </div>
+                    <div class="status-indicator">
+                        <span class="status-dot offline" id="connection-dot"></span>
+                        <span id="status-text">Connecting…</span>
+                    </div>
                 </div>
                 <div class="status-toolbar">
                     <div id="pi-folder-bar" class="pi-folder-inline" hidden>
@@ -674,6 +683,14 @@
         messageList.addEventListener('scroll', function () {
             updateScrollDownHint();
         }, { passive: true });
+
+        // Delegate clicks for thinking segments so both live and persisted timelines can be toggled.
+        messageList.addEventListener('click', function (e) {
+            const seg = e.target.closest && e.target.closest('.stream-segment-thinking');
+            if (!seg) return;
+            if (e.target.closest('button, a')) return;
+            seg.classList.toggle('expanded');
+        });
 
         if (scrollDownHint) {
             scrollDownHint.addEventListener('click', function () {
@@ -1143,8 +1160,13 @@
             if (!continuousModeEnabled) return null;
             const txt = getLastAssistantTextFromHistory();
             if (!txt) return null;
-            const norm = txt.trim().toLowerCase();
-            if (norm === 'continue_blocked') {
+            let norm = txt.trim().toLowerCase();
+            // Be forgiving about minor punctuation or explanations after continue_blocked.
+            // Examples that should count as blocked:
+            //   "continue_blocked"
+            //   "continue_blocked."
+            //   "continue_blocked, cannot proceed"
+            if (norm.startsWith('continue_blocked')) {
                 return 'go to goals.md and think about how to reach these goals. review your recently updated files in /docs/ and create a new plan in /plans/ and then execute that plan.';
             }
             return 'continue. if you cannot continue, respond only with continue_blocked';
