@@ -298,7 +298,8 @@
         .scroll-down-hint {
             position: absolute;
             bottom: 8px;
-            right: 10px;
+            left: 50%;
+            transform: translateX(-50%);
             width: 42px;
             height: 42px;
             border-radius: 50%;
@@ -323,8 +324,8 @@
             display: block;
         }
         @keyframes scrollHintBounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(7px); }
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(7px); }
         }
         .message {
             padding: 8px 10px;
