@@ -48,7 +48,7 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 | `LEASH_SESSION_MAX_AGE_SEC` | `604800` | `leash_session` cookie max-age |
 | `LEASH_BACKEND` | `ollama` | Set `pi` for Pi |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | Pi launch line (must include `--mode rpc`) |
-| `LEASH_PI_SYSTEM_PROMPT` | _(unset)_ | Optional full system prompt text; appended as `--system-prompt` if that flag is not already in `LEASH_PI_COMMAND` (on **Windows**, non-file values are written to a temp file and passed as a path so the OS command line does not drop long or multiline text) |
+| `LEASH_PI_SYSTEM_PROMPT` | _(unset)_ | Optional full system prompt text. If `LEASH_PI_COMMAND` has no `--system-prompt`, Leash uses this, else falls back to repo-root `systemprompt.txt` (if present), else `"You are a helpful assistant."` (on **Windows**, non-file values are written to a temp file path to avoid command-line mangling) |
 | `LEASH_PI_APPEND_SYSTEM_PROMPT` | _(unset)_ | Optional extra system text or file path; appended as `--append-system-prompt` if not already in the command (same Windows temp-file behavior when the value is not an existing file path) |
 | `LEASH_PI_CWD` | `$HOME` | Pi sandbox root (not `server/` unless you set it) |
 
@@ -92,6 +92,7 @@ export LEASH_BACKEND=pi
 export LEASH_PI_COMMAND="pi --mode rpc --provider ollama --model qwen3.5:latest"
 # optional: long system text without shell quoting — same as pi's --system-prompt / --append-system-prompt
 # export LEASH_PI_SYSTEM_PROMPT="You are …"
+# optional: if LEASH_PI_SYSTEM_PROMPT is unset, Leash reads ./systemprompt.txt (repo root) before defaulting
 # export LEASH_PI_APPEND_SYSTEM_PROMPT="$HOME/leash-system-extra.md"
 # optional: export LEASH_PI_CWD="$HOME/your-repo"
 cd server && python3 api.py

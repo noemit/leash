@@ -314,6 +314,8 @@ async def list_models():
             "backend": BACKEND,
             "ollama_reachable": ollama_ok,
             "pi_workspace": _pi_workspace_dict(),
+            "pi_system_prompt": pi_bridge.system_prompt_text,
+            "pi_system_prompt_source": pi_bridge.system_prompt_source,
         }
     models = await get_available_models()
     return {

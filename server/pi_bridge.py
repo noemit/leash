@@ -17,6 +17,9 @@ import uuid
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+DEFAULT_PI_SYSTEM_PROMPT = "You are a helpful assistant."
+DEFAULT_PI_SYSTEM_PROMPT_FILE = Path(__file__).resolve().parent.parent / "systemprompt.txt"
+
 
 def _windows_npm_shim(head: str) -> Optional[Path]:
     """Find pi.cmd / npx.cmd when PATH seen by Python omits %AppData%\\npm (common on Windows)."""
@@ -47,6 +50,39 @@ def _strip_outer_quotes(token: str) -> str:
 
 def _argv_has_flag(argv: List[str], flag: str) -> bool:
     return flag in argv
+
+
+def _flag_value(argv: List[str], flag: str) -> Optional[str]:
+    for i, a in enumerate(argv):
+        if a == flag and i + 1 < len(argv):
+            return argv[i + 1]
+    return None
+
+
+def _resolve_prompt_input_to_text(raw: str) -> str:
+    """Pi treats existing paths as prompt files; mirror that resolution for UI/debug."""
+    try:
+        p = Path(raw)
+        if p.is_file():
+            return p.read_text(encoding="utf-8")
+    except OSError:
+        pass
+    return raw
+
+
+def _resolve_system_prompt_fallback() -> tuple[str, str]:
+    """Return (prompt_text, source) for Pi system prompt fallback chain."""
+    sp = os.getenv("LEASH_PI_SYSTEM_PROMPT")
+    if sp and str(sp).strip():
+        return str(sp), "LEASH_PI_SYSTEM_PROMPT"
+    if DEFAULT_PI_SYSTEM_PROMPT_FILE.is_file():
+        try:
+            text = DEFAULT_PI_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
+            if text.strip():
+                return text, str(DEFAULT_PI_SYSTEM_PROMPT_FILE)
+        except OSError:
+            pass
+    return DEFAULT_PI_SYSTEM_PROMPT, "built-in default"
 
 
 def _spill_prompt_flags_for_windows_argv(argv: List[str]) -> tuple[List[str], List[str]]:
@@ -92,23 +128,28 @@ def _spill_prompt_flags_for_windows_argv(argv: List[str]) -> tuple[List[str], Li
     return out, spilled
 
 
-def merge_pi_system_env_into_argv(argv: List[str]) -> List[str]:
-    """If Pi flags are missing, add ``--system-prompt`` / ``--append-system-prompt`` from env.
+def merge_pi_system_env_into_argv(argv: List[str]) -> tuple[List[str], str, str]:
+    """Fill Pi prompt flags from command/env/default sources.
 
-    ``LEASH_PI_SYSTEM_PROMPT`` and ``LEASH_PI_APPEND_SYSTEM_PROMPT`` are optional. Values are
-    passed through to the Pi CLI (same semantics as those flags on ``pi``). If the flag
-    already appears in ``LEASH_PI_COMMAND``, the command line wins and the env var is ignored.
+    Precedence for ``--system-prompt``:
+    1) explicit flag in ``LEASH_PI_COMMAND``
+    2) ``LEASH_PI_SYSTEM_PROMPT``
+    3) repo-root ``systemprompt.txt`` (if present and non-empty)
+    4) built-in ``DEFAULT_PI_SYSTEM_PROMPT``
     """
     out = list(argv)
+    system_prompt_source = "LEASH_PI_COMMAND"
+    existing = _flag_value(out, "--system-prompt")
+    if existing is not None:
+        return out, system_prompt_source, _resolve_prompt_input_to_text(existing)
     if not _argv_has_flag(out, "--system-prompt"):
-        sp = os.getenv("LEASH_PI_SYSTEM_PROMPT")
-        if sp and str(sp).strip():
-            out.extend(["--system-prompt", str(sp)])
+        sp, system_prompt_source = _resolve_system_prompt_fallback()
+        out.extend(["--system-prompt", sp])
     if not _argv_has_flag(out, "--append-system-prompt"):
         ap = os.getenv("LEASH_PI_APPEND_SYSTEM_PROMPT")
         if ap and str(ap).strip():
             out.extend(["--append-system-prompt", str(ap)])
-    return out
+    return out, system_prompt_source, _resolve_prompt_input_to_text(sp)
 
 
 def split_leash_pi_command(raw: str) -> List[str]:
@@ -308,7 +349,9 @@ class PiBridge:
             "LEASH_PI_COMMAND",
             "pi --mode rpc --provider ollama --model qwen3.5:latest",
         )
-        merged = merge_pi_system_env_into_argv(split_leash_pi_command(raw))
+        merged, self._system_prompt_source, self._system_prompt_text = merge_pi_system_env_into_argv(
+            split_leash_pi_command(raw)
+        )
         self._argv, self._spilled_prompt_paths = _spill_prompt_flags_for_windows_argv(merged)
         self._exec_argv = resolve_pi_argv(self._argv)
         self._stderr_task: Optional[asyncio.Task[None]] = None
@@ -334,6 +377,7 @@ class PiBridge:
         parts.append(
             f"--append-system-prompt in argv: {_argv_has_flag(self._argv, '--append-system-prompt')}"
         )
+        parts.append(f"system prompt source: {self._system_prompt_source}")
         if self._spilled_prompt_paths:
             parts.append(
                 f"Windows prompt spill: {len(self._spilled_prompt_paths)} temp file(s)"
@@ -351,6 +395,14 @@ class PiBridge:
     @property
     def argv(self) -> List[str]:
         return list(self._argv)
+
+    @property
+    def system_prompt_source(self) -> str:
+        return self._system_prompt_source
+
+    @property
+    def system_prompt_text(self) -> str:
+        return self._system_prompt_text
 
     @property
     def executable(self) -> str:

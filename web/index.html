@@ -616,6 +616,8 @@
                 </div>
                 <label for="continuation-prompt-input" style="margin-top:10px;display:block;">Continuation prompt</label>
                 <textarea id="continuation-prompt-input" placeholder="Prompt sent after each turn in Continuous mode..."></textarea>
+                <label for="system-prompt-display" style="margin-top:10px;display:block;">System prompt</label>
+                <textarea id="system-prompt-display" placeholder="Resolved system prompt appears here..." readonly></textarea>
                 <p class="text-muted" style="font-size:0.72rem;margin-top:8px;">
                     When enabled, Leash will automatically say <code>continue. if you cannot continue, respond only with continue_blocked</code>
                     after each reply, and on <code>continue_blocked</code> will send a follow-up instruction to refocus on your goals and plans.
@@ -685,6 +687,7 @@
         const continuousModeToggle = document.getElementById('continuous-mode-toggle');
         const thinkingExpandedToggle = document.getElementById('thinking-expanded-toggle');
         const continuationPromptInput = document.getElementById('continuation-prompt-input');
+        const systemPromptDisplay = document.getElementById('system-prompt-display');
 
         let busy = false;
         let clearing = false;
@@ -703,6 +706,8 @@
         let customContinuationPrompt = 'continue. if you cannot continue, respond only with continue_blocked';
         /** Small local queue of user messages to send after the current turn finishes. */
         let pendingUserQueue = [];
+        /** Resolved Pi system prompt currently in effect (for read-only Settings display). */
+        let resolvedSystemPrompt = '';
 
         /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
         const SCROLL_PIN_PX = 96;
@@ -1196,10 +1201,21 @@
                     const r = data.pi_workspace.root || '';
                     const eff = data.pi_workspace.effective || '';
                     piWorkspaceHint.textContent = r ? ('Root: ' + r + (eff && eff !== r ? ' · Now: ' + eff : '')) : '';
+                    resolvedSystemPrompt = typeof data.pi_system_prompt === 'string' ? data.pi_system_prompt : '';
+                    if (systemPromptDisplay) {
+                        systemPromptDisplay.value = resolvedSystemPrompt;
+                        const src = typeof data.pi_system_prompt_source === 'string' ? data.pi_system_prompt_source : '';
+                        systemPromptDisplay.title = src ? ('Source: ' + src) : '';
+                    }
                 } else {
                     statusBarEl.classList.remove('pi-mode');
                     piFolderBar.hidden = true;
                     setPiDrawerOpen(false);
+                    resolvedSystemPrompt = '';
+                    if (systemPromptDisplay) {
+                        systemPromptDisplay.value = '';
+                        systemPromptDisplay.title = '';
+                    }
                 }
                 availableModels = data.models.slice();
                 const def = data.current_default || '';
