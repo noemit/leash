@@ -131,25 +131,37 @@ def _spill_prompt_flags_for_windows_argv(argv: List[str]) -> tuple[List[str], Li
 def merge_pi_system_env_into_argv(argv: List[str]) -> tuple[List[str], str, str]:
     """Fill Pi prompt flags from command/env/default sources.
 
-    Precedence for ``--system-prompt``:
-    1) explicit flag in ``LEASH_PI_COMMAND``
+    Precedence for resolved system prompt text:
+    1) explicit ``--system-prompt`` value in ``LEASH_PI_COMMAND``
     2) ``LEASH_PI_SYSTEM_PROMPT``
     3) repo-root ``systemprompt.txt`` (if present and non-empty)
     4) built-in ``DEFAULT_PI_SYSTEM_PROMPT``
+
+    Injection behavior:
+    - If ``LEASH_PI_COMMAND`` already specifies ``--system-prompt`` or
+      ``--append-system-prompt``, keep command-line behavior unchanged.
+    - Otherwise inject resolved fallback text via ``--append-system-prompt``.
+      (Pi CLI explicitly documents append semantics for raw text or file paths.)
     """
     out = list(argv)
     system_prompt_source = "LEASH_PI_COMMAND"
     existing = _flag_value(out, "--system-prompt")
     if existing is not None:
         return out, system_prompt_source, _resolve_prompt_input_to_text(existing)
-    if not _argv_has_flag(out, "--system-prompt"):
-        sp, system_prompt_source = _resolve_system_prompt_fallback()
-        out.extend(["--system-prompt", sp])
     if not _argv_has_flag(out, "--append-system-prompt"):
         ap = os.getenv("LEASH_PI_APPEND_SYSTEM_PROMPT")
         if ap and str(ap).strip():
             out.extend(["--append-system-prompt", str(ap)])
-    return out, system_prompt_source, _resolve_prompt_input_to_text(sp)
+    if not _argv_has_flag(out, "--append-system-prompt"):
+        sp, system_prompt_source = _resolve_system_prompt_fallback()
+        out.extend(["--append-system-prompt", sp])
+        return out, system_prompt_source, _resolve_prompt_input_to_text(sp)
+    # Command-provided append-system-prompt exists; expose it as effective text for UI.
+    existing_append = _flag_value(out, "--append-system-prompt")
+    if existing_append is not None:
+        system_prompt_source = "LEASH_PI_COMMAND (--append-system-prompt)"
+        return out, system_prompt_source, _resolve_prompt_input_to_text(existing_append)
+    return out, system_prompt_source, DEFAULT_PI_SYSTEM_PROMPT
 
 
 def split_leash_pi_command(raw: str) -> List[str]:
