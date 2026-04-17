@@ -48,7 +48,7 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 | `LEASH_SESSION_MAX_AGE_SEC` | `604800` | `leash_session` cookie max-age |
 | `LEASH_BACKEND` | `ollama` | Set `pi` for Pi |
 | `LEASH_PI_COMMAND` | `pi --mode rpc --provider ollama --model qwen3.5:latest` | Pi launch line (must include `--mode rpc`) |
-| `LEASH_PI_SYSTEM_PROMPT` | _(unset)_ | Optional full system prompt text. If `LEASH_PI_COMMAND` has no `--system-prompt`, Leash uses this, else falls back to repo-root `systemprompt.txt` (if present), else `"You are a helpful assistant."` (on **Windows**, non-file values are written to a temp file path to avoid command-line mangling) |
+| `LEASH_PI_SYSTEM_PROMPT` | _(unset)_ | Optional full system prompt text. If command/env flags are missing, Leash falls back to `systemprompt.txt` in repo root, then `server/systemprompt.txt`, then `"You are a helpful assistant."` |
 | `LEASH_PI_APPEND_SYSTEM_PROMPT` | _(unset)_ | Optional extra system text or file path; appended as `--append-system-prompt` if not already in the command (same Windows temp-file behavior when the value is not an existing file path) |
 | `LEASH_PI_CWD` | `$HOME` | Pi sandbox root (not `server/` unless you set it) |
 
@@ -67,19 +67,9 @@ In the status bar, next to the Pi folder icon, there’s a **Settings** gear tha
 - **Toggle**: The drawer has a **Continuous mode** checkbox, persisted in `localStorage` so it sticks across reloads on the same browser.
 - **Normal continuous behavior**: When Continuous mode is **enabled**, after each successful assistant turn the app automatically sends:
 
-  > `continue. if you cannot continue, respond only with continue_blocked`
+  > `continue.`
 
   as a new user message. This lets your agent keep working without you manually spamming “continue”.
-
-- **Blocked behavior**: If the model’s last assistant message is exactly:
-
-  > `continue_blocked`
-
-  then instead of asking to “continue” again, the app automatically sends:
-
-  > `go to goals.md and think about how to reach these goals. review your recently updated files in /docs/ and create a new plan in /plans/ and then execute that plan.`
-
-  as the next user message. This gives your agent a consistent recovery path when it can’t keep going on its current plan.
 
 Automatic continuous follow‑ups are only triggered for successful, non‑aborted turns (if you hit **Stop**, that turn will not auto‑chain).
 
@@ -90,13 +80,21 @@ Automatic continuous follow‑ups are only triggered for successful, non‑abort
 ```bash
 export LEASH_BACKEND=pi
 export LEASH_PI_COMMAND="pi --mode rpc --provider ollama --model qwen3.5:latest"
-# optional: long system text without shell quoting — same as pi's --system-prompt / --append-system-prompt
+# optional: long system text via env (same as pi's prompt flags)
 # export LEASH_PI_SYSTEM_PROMPT="You are …"
-# optional: if LEASH_PI_SYSTEM_PROMPT is unset, Leash reads ./systemprompt.txt (repo root) before defaulting
 # export LEASH_PI_APPEND_SYSTEM_PROMPT="$HOME/leash-system-extra.md"
 # optional: export LEASH_PI_CWD="$HOME/your-repo"
 cd server && python3 api.py
 ```
+
+### Local `systemprompt.txt` (recommended)
+
+For stable prompt behavior without shell quoting, create a local file (kept out of git):
+
+- `./systemprompt.txt` (repo root), or
+- `./server/systemprompt.txt`
+
+Leash will use that text as the system prompt when `LEASH_PI_COMMAND` does not explicitly set prompt flags and `LEASH_PI_SYSTEM_PROMPT` is unset.
 
 Requires **Node** + `npm install -g @mariozechner/pi-coding-agent`. **Windows:** PowerShell examples, `pi.cmd`, `LEASH_PI_SYSTEM_PROMPT`, and quoting notes are in **[docs/windows.md](docs/windows.md)**.
 

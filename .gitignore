@@ -10,3 +10,5 @@ dist/
 build/
 .DS_Store
 ollama_models/
+systemprompt.txt
+server/systemprompt.txt

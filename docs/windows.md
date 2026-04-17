@@ -16,7 +16,7 @@ Leash reads variables from the **process that starts Python** (your terminal, VS
 
 To confirm what Leash will run, check the server log lines:
 
-- **`[pi-bridge] …`** — printed when the Pi bridge starts. It shows whether `LEASH_PI_SYSTEM_PROMPT` / `LEASH_PI_APPEND_SYSTEM_PROMPT` were **seen by the Python process** (`set` vs `unset`, character count, and `used_by_merge=true` only if the value is non-empty after strip). It also shows whether `--system-prompt` / `--append-system-prompt` ended up in the argv passed to Pi, plus `system prompt source` (`LEASH_PI_COMMAND`, `LEASH_PI_SYSTEM_PROMPT`, repo `systemprompt.txt`, or built-in default).
+- **`[pi-bridge] …`** — printed when the Pi bridge starts. It shows whether `LEASH_PI_SYSTEM_PROMPT` / `LEASH_PI_APPEND_SYSTEM_PROMPT` were **seen by the Python process** (`set` vs `unset`, character count, and `used_by_merge=true` only if the value is non-empty after strip). It also shows whether `--system-prompt` / `--append-system-prompt` ended up in the argv passed to Pi, plus `system prompt source` (`LEASH_PI_COMMAND`, `LEASH_PI_SYSTEM_PROMPT`, `systemprompt.txt`, or built-in default).
 - **`[API] Pi command: …`** — the full merged argv (on Windows, long prompt **bodies** may appear as paths to temp `*.prompt.txt` files; Leash writes the text there so the Windows command line does not truncate or mangle it).
 
 If `[pi-bridge]` says `LEASH_PI_SYSTEM_PROMPT unset`, the server process never received that variable (wrong terminal, IDE launch profile without env, or server not restarted after `setx`).
@@ -25,7 +25,7 @@ If it says `set` but `used_by_merge=false`, the value is empty or whitespace-onl
 
 If `used_by_merge=true` but `--system-prompt in argv: False`, your `LEASH_PI_COMMAND` already contains `--system-prompt`, so the env var is skipped by design.
 
-If both command and env are missing, Leash tries repo-root `systemprompt.txt`. If that file is missing or empty, it falls back to:
+If both command and env are missing, Leash tries `systemprompt.txt` in repo root, then `server/systemprompt.txt`. If missing/empty, it falls back to:
 
 `You are a helpful assistant.`
 
@@ -53,6 +53,13 @@ $env:LEASH_PI_COMMAND = "C:\Users\YourName\AppData\Roaming\npm\pi.cmd --mode rpc
 ## System prompt: `LEASH_PI_COMMAND` vs dedicated env vars
 
 Pi’s CLI supports `--system-prompt` and `--append-system-prompt` (see `pi --help`). You can put them in `LEASH_PI_COMMAND`, **or** use Leash’s optional variables so you avoid fragile quoting in one long line.
+
+You can also skip env vars and use a local prompt file:
+
+- `systemprompt.txt` in the project root, or
+- `server\systemprompt.txt`
+
+These files are ignored by git in this repo so you can keep machine-specific instructions locally.
 
 ### Option A — flags inside `LEASH_PI_COMMAND`
 

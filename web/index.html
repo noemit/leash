@@ -493,18 +493,7 @@
             background-color: var(--bg);
             box-shadow: 0 -8px 24px var(--bg);
         }
-        .composer-actions {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .composer-actions-row {
-            display: flex;
-            gap: 6px;
-            align-items: stretch;
-            justify-content: flex-end;
-        }
-        .input-area { display: flex; gap: 8px; align-items: flex-end; }
+        .input-area { display: flex; gap: 0; align-items: flex-end; }
         .input-wrapper {
             flex: 1;
             position: relative;
@@ -525,26 +514,17 @@
         }
         textarea#user-input::placeholder { color: var(--text-muted); opacity: 0.85; }
         textarea#user-input:focus { outline: none; }
-        #send-btn {
-            padding: 12px 18px;
-            border: var(--line);
-            background: var(--accent);
-            color: #fff;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-        #send-btn:hover { background: var(--accent-hover); }
         #stop-btn {
-            padding: 8px 14px;
+            padding: 5px 10px;
             border: var(--line);
             background: var(--surface);
             color: var(--offline);
             font-weight: 600;
             font-family: inherit;
             cursor: pointer;
-            font-size: 0.85rem;
+            font-size: 0.74rem;
+            line-height: 1.1;
+            margin-left: 8px;
         }
         #stop-btn:hover:not(:disabled) {
             background: #fbe5ec;
@@ -568,6 +548,7 @@
                     <div class="status-indicator">
                         <span class="status-dot offline" id="connection-dot"></span>
                         <span id="status-text">Connecting…</span>
+                        <button type="button" id="stop-btn" hidden aria-label="Stop current response">Stop</button>
                     </div>
                     <div class="status-meta" id="model-info"></div>
                 </div>
@@ -619,13 +600,12 @@
                 <label for="system-prompt-display" style="margin-top:10px;display:block;">System prompt</label>
                 <textarea id="system-prompt-display" placeholder="Resolved system prompt appears here..." readonly></textarea>
                 <p class="text-muted" style="font-size:0.72rem;margin-top:8px;">
-                    When enabled, Leash will automatically say <code>continue. if you cannot continue, respond only with continue_blocked</code>
-                    after each reply, and on <code>continue_blocked</code> will send a follow-up instruction to refocus on your goals and plans.
+                    When enabled, Leash automatically sends the continuation prompt after each reply.
                 </p>
             </div>
             <div id="slash-help-drawer" class="slash-help-drawer" role="region" aria-label="Slash commands">
                 <h3>Slash commands</h3>
-                <p class="text-muted" style="font-size:0.74rem;margin-bottom:8px;">Send with the Send button (same as a normal message).</p>
+                <p class="text-muted" style="font-size:0.74rem;margin-bottom:8px;">Press Enter to send (Shift+Enter for newline).</p>
                 <dl class="slash-cmd-list">
                     <dt><code>/clear</code> · <code>/reset</code></dt>
                     <dd>Clear this chat. In Pi mode, also starts a new agent session when the server can reach Pi.</dd>
@@ -650,12 +630,6 @@
                 <div class="input-wrapper">
                     <textarea id="user-input" placeholder="Message…  /help for commands" autocomplete="off" aria-label="Message input"></textarea>
                 </div>
-                <div class="composer-actions">
-                    <div class="composer-actions-row">
-                        <button type="button" id="send-btn">Send</button>
-                        <button type="button" id="stop-btn" hidden>Stop</button>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -670,7 +644,6 @@
         const messageList = document.getElementById('message-list');
         const scrollDownHint = document.getElementById('scroll-down-hint');
         const input = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
         const stopBtn = document.getElementById('stop-btn');
         const piFolderBar = document.getElementById('pi-folder-bar');
         const piFolderToggle = document.getElementById('pi-folder-toggle');
@@ -703,7 +676,7 @@
         /** Whether thinking panels should show expanded by default. */
         let thinkingExpandedByDefault = false;
         /** Custom prompt used for normal continuous follow-ups. */
-        let customContinuationPrompt = 'continue. if you cannot continue, respond only with continue_blocked';
+        let customContinuationPrompt = 'continue.';
         /** Small local queue of user messages to send after the current turn finishes. */
         let pendingUserQueue = [];
         /** Resolved Pi system prompt currently in effect (for read-only Settings display). */
@@ -1144,7 +1117,7 @@
                 }
             }
             if (!shown) {
-                addMessage('system', 'Same origin as this page — works behind ngrok or Cloudflare Tunnel.', false);
+                updateScrollDownHint();
             }
         }
 
@@ -1272,17 +1245,8 @@
             if (!continuousModeEnabled) return null;
             const txt = getLastAssistantTextFromHistory();
             if (!txt) return null;
-            let norm = txt.trim().toLowerCase();
-            // Be forgiving about minor punctuation or explanations after continue_blocked.
-            // Examples that should count as blocked:
-            //   "continue_blocked"
-            //   "continue_blocked."
-            //   "continue_blocked, cannot proceed"
-            if (norm.startsWith('continue_blocked')) {
-                return 'go to goals.md and think about how to reach these goals. review your recently updated files in /docs/ and create a new plan in /plans/ and then execute that plan.';
-            }
             const p = String(customContinuationPrompt || '').trim();
-            return p || 'continue. if you cannot continue, respond only with continue_blocked';
+            return p || 'continue.';
         }
 
         function applySavedSettings() {
@@ -1316,7 +1280,7 @@
                 const payload = {
                     continuousModeEnabled: !!continuousModeEnabled,
                     thinkingExpandedByDefault: !!thinkingExpandedByDefault,
-                    customContinuationPrompt: String(customContinuationPrompt || '').trim() || 'continue. if you cannot continue, respond only with continue_blocked',
+                    customContinuationPrompt: String(customContinuationPrompt || '').trim() || 'continue.',
                 };
                 localStorage.setItem('leash_settings', JSON.stringify(payload));
             } catch (_) {}
@@ -1337,7 +1301,7 @@
         if (continuationPromptInput) {
             continuationPromptInput.addEventListener('change', () => {
                 customContinuationPrompt = String(continuationPromptInput.value || '').trim()
-                    || 'continue. if you cannot continue, respond only with continue_blocked';
+                    || 'continue.';
                 continuationPromptInput.value = customContinuationPrompt;
                 persistSettings();
             });
@@ -1377,7 +1341,6 @@
                 input.value = '';
             }
             busy = true;
-            sendBtn.disabled = true;
             if (stopBtn) stopBtn.hidden = false;
             setConnected(true, 'Thinking…');
 
@@ -1524,7 +1487,6 @@
                 }
             } finally {
                 busy = false;
-                sendBtn.disabled = false;
                 if (stopBtn) stopBtn.hidden = true;
                 currentStreamAbortController = null;
                 updateScrollDownHint();
@@ -1580,7 +1542,6 @@
             }
         });
 
-        sendBtn.addEventListener('click', sendMessage);
         if (stopBtn) {
             stopBtn.addEventListener('click', () => {
                 if (!busy || !currentStreamAbortController) return;

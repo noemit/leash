@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 DEFAULT_PI_SYSTEM_PROMPT = "You are a helpful assistant."
-DEFAULT_PI_SYSTEM_PROMPT_FILE = Path(__file__).resolve().parent.parent / "systemprompt.txt"
+SYSTEM_PROMPT_FILES = [
+    Path(__file__).resolve().parent.parent / "systemprompt.txt",
+    Path(__file__).resolve().parent / "systemprompt.txt",
+]
 
 
 def _windows_npm_shim(head: str) -> Optional[Path]:
@@ -75,13 +78,14 @@ def _resolve_system_prompt_fallback() -> tuple[str, str]:
     sp = os.getenv("LEASH_PI_SYSTEM_PROMPT")
     if sp and str(sp).strip():
         return str(sp), "LEASH_PI_SYSTEM_PROMPT"
-    if DEFAULT_PI_SYSTEM_PROMPT_FILE.is_file():
-        try:
-            text = DEFAULT_PI_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
-            if text.strip():
-                return text, str(DEFAULT_PI_SYSTEM_PROMPT_FILE)
-        except OSError:
-            pass
+    for prompt_file in SYSTEM_PROMPT_FILES:
+        if prompt_file.is_file():
+            try:
+                text = prompt_file.read_text(encoding="utf-8")
+                if text.strip():
+                    return text, str(prompt_file)
+            except OSError:
+                pass
     return DEFAULT_PI_SYSTEM_PROMPT, "built-in default"
 
 
