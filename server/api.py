@@ -1,7 +1,9 @@
 import copy
 import json
 import os
+import re
 import uuid
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +35,8 @@ SYSTEM_PROMPT = "You are a helpful assistant. Answer clearly and concisely."
 # In-memory chat per browser session (cleared on server restart).
 SESSION_MESSAGES: Dict[str, List[Dict[str, Any]]] = {}
 SESSION_SYSTEM_PROMPTS: Dict[str, str] = {}
+SUMMARY_LOG_PATH = BASE_DIR / "log.md"
+SUMMARY_LOG_LOCK = asyncio.Lock()
 
 pi_bridge: Optional[PiBridge] = None
 if BACKEND == "pi":
@@ -140,6 +144,7 @@ class ChatTurnBody(BaseModel):
 
     content: str = Field(..., min_length=1)
     model: Optional[str] = None
+    summarizer_enabled: bool = False
 
 
 class PiCwdBody(BaseModel):
@@ -269,6 +274,124 @@ async def iter_ollama_stream(model_name: str, messages: List[Dict[str, Any]]):
                 }
     except aiohttp.ClientError as e:
         raise RuntimeError(f"Ollama connection error: {e!s}") from e
+
+
+def _sanitize_summary_line(text: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(text or "").strip())
+    cleaned = cleaned.strip("-*` ")
+    if not cleaned:
+        return "Completed a turn."
+    if len(cleaned) > 180:
+        cleaned = cleaned[:177].rstrip() + "..."
+    return cleaned
+
+
+def _build_subagent_args_for_summary() -> List[str]:
+    if not pi_bridge:
+        raise RuntimeError("Pi bridge not initialized")
+    argv = pi_bridge.exec_argv
+    if not argv:
+        raise RuntimeError("Pi command unavailable")
+    base = argv[1:]
+    out: List[str] = []
+    skip_next = False
+    for i, token in enumerate(base):
+        if skip_next:
+            skip_next = False
+            continue
+        if token in ("--mode", "-m"):
+            if i + 1 < len(base):
+                skip_next = True
+            continue
+        if token in ("rpc", "json"):
+            continue
+        if token in ("-p", "--print"):
+            continue
+        if token in ("--no-session", "--new-session"):
+            continue
+        out.append(token)
+    out.extend(["--mode", "json", "-p", "--no-session"])
+    return [argv[0], *out]
+
+
+async def _summarize_turn_with_subagent(user_text: str, assistant_text: str) -> str:
+    task = (
+        "Summarize what the main coding agent just did in one short sentence. "
+        "Output only the summary sentence, plain text, max 160 characters.\n\n"
+        f"User request:\n{user_text.strip()}\n\n"
+        f"Assistant response:\n{assistant_text.strip()}\n"
+    )
+    cmd = _build_subagent_args_for_summary() + [task]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=pi_bridge.cwd if pi_bridge else str(BASE_DIR),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=45.0)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("Summarizer subagent timed out")
+    if proc.returncode != 0:
+        err = (stderr or b"").decode("utf-8", errors="replace").strip()
+        raise RuntimeError(err or f"Summarizer subagent failed with exit code {proc.returncode}")
+    text = (stdout or b"").decode("utf-8", errors="replace").strip()
+    if not text:
+        raise RuntimeError("Summarizer subagent returned empty output")
+    return _sanitize_summary_line(text.splitlines()[-1])
+
+
+def _fallback_turn_summary(user_text: str, assistant_text: str) -> str:
+    user_snip = _sanitize_summary_line(user_text)
+    assistant_snip = _sanitize_summary_line(assistant_text)
+    return _sanitize_summary_line(f"Handled: {user_snip}. Result: {assistant_snip}")
+
+
+async def _append_turn_summary(user_text: str, assistant_text: str, *, use_subagent: bool) -> None:
+    summary = ""
+    if use_subagent:
+        try:
+            summary = await _summarize_turn_with_subagent(user_text, assistant_text)
+        except Exception:
+            summary = ""
+    if not summary:
+        summary = _fallback_turn_summary(user_text, assistant_text)
+    line = f"- {datetime.now().isoformat(timespec='seconds')} | {summary}\n"
+    async with SUMMARY_LOG_LOCK:
+        SUMMARY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with SUMMARY_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(line)
+
+
+async def _append_turn_summary_with_status(
+    user_text: str, assistant_text: str, *, use_subagent: bool
+) -> Dict[str, Any]:
+    used_subagent = bool(use_subagent)
+    fallback_used = False
+    summary = ""
+    if used_subagent:
+        try:
+            summary = await _summarize_turn_with_subagent(user_text, assistant_text)
+        except Exception:
+            fallback_used = True
+            summary = ""
+    if not summary:
+        summary = _fallback_turn_summary(user_text, assistant_text)
+        if used_subagent:
+            fallback_used = True
+    line = f"- {datetime.now().isoformat(timespec='seconds')} | {summary}\n"
+    async with SUMMARY_LOG_LOCK:
+        SUMMARY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with SUMMARY_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(line)
+    return {
+        "summary": summary,
+        "used_subagent": used_subagent,
+        "fallback_used": fallback_used,
+        "log_path": str(SUMMARY_LOG_PATH),
+    }
 
 
 @app.get("/health")
@@ -505,6 +628,13 @@ async def chat(request: Request, body: ChatTurnBody):
         raise HTTPException(status_code=503, detail=str(e))
 
     msgs.append({"role": "assistant", "content": text})
+    if body.summarizer_enabled:
+        summary_status = await _append_turn_summary_with_status(
+            user_txt,
+            text,
+            use_subagent=(BACKEND == "pi" and pi_bridge is not None),
+        )
+        resp_body["summarizer"] = summary_status
     resp_body["messages"] = copy.deepcopy(msgs)
 
     resp = JSONResponse(resp_body)
@@ -608,6 +738,34 @@ async def chat_stream(request: Request, body: ChatTurnBody):
                 SESSION_MESSAGES[sid].append(
                     {"role": "assistant", "content": full_text}
                 )
+                if body.summarizer_enabled:
+                    yield _ndjson_line(
+                        {
+                            "event": "summarizer",
+                            "phase": "start",
+                            "detail": "Summarizer is running...",
+                        }
+                    )
+                    summary_status = await _append_turn_summary_with_status(
+                        user_txt,
+                        full_text,
+                        use_subagent=(BACKEND == "pi" and pi_bridge is not None),
+                    )
+                    yield _ndjson_line(
+                        {
+                            "event": "summarizer",
+                            "phase": "end",
+                            "detail": (
+                                "Summarizer complete (fallback used)."
+                                if summary_status.get("fallback_used")
+                                else "Summarizer complete."
+                            ),
+                            "summary": summary_status.get("summary", ""),
+                            "fallback_used": bool(summary_status.get("fallback_used")),
+                            "used_subagent": bool(summary_status.get("used_subagent")),
+                            "log_path": summary_status.get("log_path", str(SUMMARY_LOG_PATH)),
+                        }
+                    )
                 yield _ndjson_line(
                     {
                         "event": "done",

@@ -65,6 +65,7 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 In the status bar, next to the Pi folder icon, there’s a **Settings** gear that opens a small settings drawer.
 
 - **Toggle**: The drawer has a **Continuous mode** checkbox, persisted in `localStorage` so it sticks across reloads on the same browser.
+- **Summarizer subagent**: The drawer also has **Enable summarizer subagent**. When enabled, each completed assistant turn appends one brief line to `log.md` at the repo root.
 - **Normal continuous behavior**: When Continuous mode is **enabled**, after each successful assistant turn the app automatically sends:
 
   > `continue.`

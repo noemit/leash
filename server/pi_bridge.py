@@ -425,6 +425,10 @@ class PiBridge:
         return self._exec_argv[0]
 
     @property
+    def exec_argv(self) -> List[str]:
+        return list(self._exec_argv)
+
+    @property
     def cwd(self) -> str:
         return self._cwd
 

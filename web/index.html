@@ -487,33 +487,38 @@
             position: sticky;
             bottom: 0;
             z-index: 2;
-            padding-top: 8px;
-            margin-top: 2px;
-            background: linear-gradient(to bottom, transparent 0%, var(--bg) 12px);
-            background-color: var(--bg);
-            box-shadow: 0 -8px 24px var(--bg);
+            padding-top: 4px;
+            margin-top: 0;
+            background: linear-gradient(to bottom, transparent 0%, var(--bg) 16px);
         }
         .input-area { display: flex; gap: 0; align-items: flex-end; }
         .input-wrapper {
             flex: 1;
             position: relative;
-            border: var(--chat-border);
-            background: var(--surface);
+            border-top: var(--line);
+            background: transparent;
         }
-        textarea#user-input {
+        #user-input {
             width: 100%;
-            padding: 10px 12px;
+            padding: 10px 0 6px 0;
             border: none;
             background: transparent;
             color: var(--text);
             font-size: 1rem;
             font-family: inherit;
-            resize: vertical;
-            min-height: 48px;
+            min-height: 28px;
             max-height: 160px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
-        textarea#user-input::placeholder { color: var(--text-muted); opacity: 0.85; }
-        textarea#user-input:focus { outline: none; }
+        #user-input:focus { outline: none; }
+        #user-input:empty::before {
+            content: attr(data-placeholder);
+            color: var(--text-muted);
+            opacity: 0.85;
+            pointer-events: none;
+        }
         #stop-btn {
             padding: 5px 10px;
             border: var(--line);
@@ -595,6 +600,10 @@
                     <label for="thinking-expanded-toggle">Show thinking panels by default</label>
                     <input type="checkbox" id="thinking-expanded-toggle" />
                 </div>
+                <div class="setting-row">
+                    <label for="summarizer-toggle">Enable summarizer subagent (append to <code>log.md</code>)</label>
+                    <input type="checkbox" id="summarizer-toggle" />
+                </div>
                 <label for="continuation-prompt-input" style="margin-top:10px;display:block;">Continuation prompt</label>
                 <textarea id="continuation-prompt-input" placeholder="Prompt sent after each turn in Continuous mode..."></textarea>
                 <label for="system-prompt-display" style="margin-top:10px;display:block;">System prompt</label>
@@ -628,7 +637,7 @@
         <div class="composer">
             <div class="input-area">
                 <div class="input-wrapper">
-                    <textarea id="user-input" placeholder="Message…  /help for commands" autocomplete="off" aria-label="Message input"></textarea>
+                    <div id="user-input" contenteditable="true" role="textbox" aria-label="Message input" data-placeholder="Message... /help for commands"></div>
                 </div>
             </div>
         </div>
@@ -661,6 +670,7 @@
         const thinkingExpandedToggle = document.getElementById('thinking-expanded-toggle');
         const continuationPromptInput = document.getElementById('continuation-prompt-input');
         const systemPromptDisplay = document.getElementById('system-prompt-display');
+        const summarizerToggle = document.getElementById('summarizer-toggle');
 
         let busy = false;
         let clearing = false;
@@ -677,6 +687,8 @@
         let thinkingExpandedByDefault = false;
         /** Custom prompt used for normal continuous follow-ups. */
         let customContinuationPrompt = 'continue.';
+        /** Whether to run the post-turn summarizer subagent and append to log.md. */
+        let summarizerEnabled = false;
         /** Small local queue of user messages to send after the current turn finishes. */
         let pendingUserQueue = [];
         /** Resolved Pi system prompt currently in effect (for read-only Settings display). */
@@ -684,6 +696,27 @@
 
         /** Pixels from bottom to treat as "following" live output (auto-scroll during stream). */
         const SCROLL_PIN_PX = 96;
+
+        function getInputText() {
+            return (input.textContent || '').replace(/\u00a0/g, ' ').trim();
+        }
+
+        function clearInputText() {
+            input.textContent = '';
+        }
+
+        function focusInputAtEnd() {
+            if (!input || typeof input.focus !== 'function') return;
+            input.focus();
+            if (typeof window.getSelection !== 'function' || typeof document.createRange !== 'function') return;
+            const sel = window.getSelection();
+            if (!sel) return;
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
 
         function isMessageListNearBottom() {
             const el = messageList;
@@ -1263,6 +1296,9 @@
                 if (s && typeof s.customContinuationPrompt === 'string' && s.customContinuationPrompt.trim()) {
                     customContinuationPrompt = s.customContinuationPrompt;
                 }
+                if (s && typeof s.summarizerEnabled === 'boolean') {
+                    summarizerEnabled = s.summarizerEnabled;
+                }
             } catch (_) {}
             if (continuousModeToggle) {
                 continuousModeToggle.checked = !!continuousModeEnabled;
@@ -1273,6 +1309,9 @@
             if (continuationPromptInput) {
                 continuationPromptInput.value = customContinuationPrompt;
             }
+            if (summarizerToggle) {
+                summarizerToggle.checked = !!summarizerEnabled;
+            }
         }
 
         function persistSettings() {
@@ -1281,6 +1320,7 @@
                     continuousModeEnabled: !!continuousModeEnabled,
                     thinkingExpandedByDefault: !!thinkingExpandedByDefault,
                     customContinuationPrompt: String(customContinuationPrompt || '').trim() || 'continue.',
+                    summarizerEnabled: !!summarizerEnabled,
                 };
                 localStorage.setItem('leash_settings', JSON.stringify(payload));
             } catch (_) {}
@@ -1306,6 +1346,12 @@
                 persistSettings();
             });
         }
+        if (summarizerToggle) {
+            summarizerToggle.addEventListener('change', () => {
+                summarizerEnabled = !!summarizerToggle.checked;
+                persistSettings();
+            });
+        }
 
         async function sendChat(text, viaAuto) {
             text = String(text || '').trim();
@@ -1321,7 +1367,7 @@
                 const firstLine = text.split('\n').map(function (l) { return l.trim(); }).find(Boolean) || text;
                 const parts = firstLine.trim().split(/\s+/);
                 const cmd = parts[0].toLowerCase();
-                input.value = '';
+                clearInputText();
                 if (cmd === '/clear' || cmd === '/reset') {
                     await clearContext();
                     return;
@@ -1338,7 +1384,7 @@
             if (busy || !selectedModel) return;
 
             if (!viaAuto) {
-                input.value = '';
+                clearInputText();
             }
             busy = true;
             if (stopBtn) stopBtn.hidden = false;
@@ -1356,7 +1402,8 @@
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         content: text,
-                        model: selectedModel
+                        model: selectedModel,
+                        summarizer_enabled: !!summarizerEnabled
                     }),
                     signal: currentStreamAbortController ? currentStreamAbortController.signal : undefined
                 });
@@ -1444,6 +1491,22 @@
                         donePayload = o;
                     } else if (o.event === 'error') {
                         streamErr = typeof o.detail === 'string' ? o.detail : JSON.stringify(o.detail || o);
+                    } else if (o.event === 'summarizer') {
+                        if (o.phase === 'start') {
+                            addMessage('system', String(o.detail || 'Summarizer is running...'), false);
+                        } else if (o.phase === 'end') {
+                            const usedSubagent = !!o.used_subagent;
+                            const fallbackUsed = !!o.fallback_used;
+                            const prefix = usedSubagent
+                                ? (fallbackUsed ? 'Summarizer (fallback)' : 'Summarizer (subagent)')
+                                : 'Summarizer';
+                            const summaryTxt = String(o.summary || '').trim();
+                            const detailTxt = String(o.detail || '').trim();
+                            const msg = summaryTxt
+                                ? (prefix + ': ' + summaryTxt)
+                                : (detailTxt || (prefix + ' complete.'));
+                            addMessage('system', msg, false);
+                        }
                     }
                 });
 
@@ -1507,9 +1570,10 @@
         }
 
         async function sendMessage() {
-            const text = input.value.trim();
+            const text = getInputText();
             if (!text) return;
             await sendChat(text, false);
+            focusInputAtEnd();
         }
 
         piSubpathBtn.addEventListener('click', async () => {
@@ -1557,7 +1621,7 @@
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (!input.disabled) sendMessage();
+                sendMessage();
             }
         });
 
@@ -1566,6 +1630,7 @@
             await populateModels();
             await loadSession();
             updateScrollDownHint();
+            focusInputAtEnd();
         })();
     </script>
 </body>
