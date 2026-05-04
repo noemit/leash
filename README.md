@@ -1,10 +1,35 @@
 # Leash
 
-Technical user's minimal Pi‑based OpenClaw dupe — there's not a lot going on here; it's just to keep your agent running and on a leash.
+**Your AI agent. One browser tab. No drama.**
 
-Mobile-friendly web UI for your local AI stack: **[Ollama](https://ollama.com)** by default, or **[Pi](https://shittycodingagent.ai/)** in RPC mode for tools and disk access. Small **FastAPI** app + static UI, same origin so it works behind **ngrok** / Cloudflare Tunnel.
+Leash is a small **FastAPI** app with a **mobile-first** web UI that talks to your machine’s brain—**[Ollama](https://ollama.com)** out of the box, or **[Pi](https://shittycodingagent.ai/)** in RPC mode when you want tools and disk access. Same origin, tunnel-friendly: point **ngrok** or Cloudflare Tunnel at it and your phone becomes a remote cockpit for whatever runs at home on the super minimal and extensible Pi agent.
+
+Not a platform, not a new product, not a tool— just a leash. Keep the agent running, reachable, and under your rules.
 
 [MIT License](LICENSE)
+
+---
+
+## What it’s about
+
+- **Tell your local agent what to do - no matter where you are** — browser UI tuned for easy mobile use.
+- **Local models by default** — Ollama on localhost; no accounts required. Use cloud agents if you want. But why would you do that when Local AI is here?
+- **Power when you want it** — Give the agent a working directory (`LEASH_PI_CWD`) without reinventing orchestration.
+
+---
+
+## Who it’s for
+
+- **Builders** who already run Ollama (or Pi) and want access to your agents while they step outside to get more coffee. 
+- **Anyone who wants to go all in on Local AI** — Access a local model wherever you are - full privacy and control even on mobile.
+
+---
+
+## Why it feels good to use
+
+You’re not opening yet another SaaS chat where your data will definitely not be kept private (even if they don't use it to train). You’re opening **your** stack: the model you pulled, using tools on disk, optional continuous mode so the agent can chain **`continue.`** without you paste‑spamming. Stop mid‑stream, collapse Pi’s “Thinking” clutter, type your next message while the model still talks—it’s built for **real work**.
+
+---
 
 ## Modes
 
@@ -14,6 +39,8 @@ Mobile-friendly web UI for your local AI stack: **[Ollama](https://ollama.com)**
 | **Disk / shell** | No | Yes (within `LEASH_PI_CWD`) |
 
 Listens on **`0.0.0.0:8080`** by default.
+
+---
 
 ## Quick start
 
@@ -36,6 +63,8 @@ From the **repo root** (folder with `server/`, `web/`, `requirements.txt`):
 **Tunnel:** e.g. `ngrok http 8080` on the machine running Leash, then open the HTTPS URL on your phone.
 
 **Windows (PowerShell, Pi, quoting):** see **[docs/windows.md](docs/windows.md)**.
+
+---
 
 ## Environment
 
@@ -76,6 +105,8 @@ Automatic continuous follow‑ups are only triggered for successful, non‑abort
 
 **Pi:** Model comes only from **`LEASH_PI_COMMAND`** (`--model …`). In the UI, **folder** sets a subpath under `LEASH_PI_CWD` (`GET/POST /api/pi/cwd`). Clearing chat also starts a **new Pi RPC session** when possible.
 
+---
+
 ## Pi mode (shell)
 
 ```bash
@@ -99,11 +130,15 @@ Leash will use that text as the system prompt when `LEASH_PI_COMMAND` does not e
 
 Requires **Node** + `npm install -g @mariozechner/pi-coding-agent`. **Windows:** PowerShell examples, `pi.cmd`, `LEASH_PI_SYSTEM_PROMPT`, and quoting notes are in **[docs/windows.md](docs/windows.md)**.
 
+---
+
 ## Dev
 
 ```bash
 cd server && uvicorn api:app --reload --host 0.0.0.0 --port 8080
 ```
+
+---
 
 ## Troubleshooting
 
@@ -115,6 +150,8 @@ cd server && uvicorn api:app --reload --host 0.0.0.0 --port 8080
 - **Traceback in `h11_impl.py`** — Scroll up for the real frame in `api.py` / deps. Python **3.14:** reinstall from `requirements.txt` (`uvicorn>=0.38`) or use **Docker** (Python 3.11 image).
 
 Optional sample keys: **`config/tunnel.conf`**.
+
+---
 
 ## Repo
 
